@@ -83,13 +83,315 @@ typedef enum ParseState
     PS_ARG
 } ParseState;
 
+typedef struct Parser
+{
+    FILE *doc;
+    char *line;
+    unsigned long lineno;
+    char buf[1024];
+} Parser;
+
+static int parseval(Parser *p, CliDoc **val, CliDoc *parent);
+static int parseint(Parser *p, int *intval);
+static int parseargvals(Parser *p, CDArg *arg);
+static int parseflag(Parser *p, CDRoot *root);
+static int parsearg(Parser *p, CDRoot *root);
+static int parse(CDRoot *root, FILE *doc);
+
 #define isws(c) (c == ' ' || c == '\t')
 #define skipws(p) while(isws(*(p))) ++(p)
 #define skipwsb(p) while(isws(*(p-1))) --(p)
 #define err(s) do { \
-    fprintf(stderr, "parse error in line %lu: %s\n", lineno, (s)); \
+    fprintf(stderr, "parse error in line %lu: %s\n", p->lineno, (s)); \
     goto error; } while (0)
-#define nextline (line = ((++lineno),fgets(buf, sizeof buf, doc)))
+#define nextline (p->line = ((++p->lineno), \
+	    fgets(p->buf, sizeof p->buf, p->doc)))
+
+static int parseval(Parser *p, CliDoc **val, CliDoc *parent)
+{
+    char *tmp;
+    char *txt = 0;
+    if (*p->line == '\n')
+    {
+	int done = 0;
+	size_t txtlen = 0;
+	for (;;) {
+	    if (!nextline) err("Unexpected end of file");
+	    skipws(p->line);
+	    if (*p->line == '\n') continue;
+	    while (!done && *p->line != '\n')
+	    {
+		if (*p->line == '.' && p->line[1] == '\n')
+		{
+		    done = 1;
+		    break;
+		}
+		tmp = strchr(p->line, '\n');
+		if (!tmp) err("Expected end of line");
+		skipwsb(tmp);
+		*tmp++ = ' ';
+		*tmp = 0;
+		size_t linelen = strlen(p->line);
+		txt = xrealloc(txt, txtlen + linelen + 1);
+		strcpy(txt+txtlen, p->line);
+		txtlen += linelen;
+		if (!nextline) err("Unexpected end of file");
+		skipws(p->line);
+	    }
+	    txt[txtlen-1] = 0;
+	    CDText *text = xmalloc(sizeof *text);
+	    text->parent = parent;
+	    text->type = CT_TEXT;
+	    text->text = txt;
+	    txt = 0;
+	    txtlen = 0;
+	    if (!*val) *val = (CliDoc *)text;
+	    else if ((*val)->type == CT_LIST)
+	    {
+		text->parent = *val;
+		CDList *list = (CDList *)*val;
+		list->c = xrealloc(list->c,
+			(list->n+1) * sizeof *list->c);
+		list->c[list->n++] = (CliDoc *)text;
+	    }
+	    else
+	    {
+		CDText *first = (CDText *)*val;
+		CDList *list = xmalloc(sizeof *list);
+		list->parent = parent;
+		list->type = CT_LIST;
+		list->n = 2;
+		list->c = xmalloc(2 * sizeof *list->c);
+		first->parent = (CliDoc *)list;
+		text->parent = (CliDoc *)list;
+		list->c[0] = (CliDoc *)first;
+		list->c[1] = (CliDoc *)text;
+		*val = (CliDoc *)list;
+	    }
+	    if (done) break;
+	}
+    }
+    else
+    {
+	tmp = strchr(p->line, '\n');
+	if (!tmp) err("Expected end of line");
+	skipwsb(tmp);
+	*tmp = 0;
+	CDText *text = xmalloc(sizeof *text);
+	text->parent = parent;
+	text->type = CT_TEXT;
+	text->text = malloc(strlen(p->line)+1);
+	strcpy(text->text, p->line);
+	*val = (CliDoc *)text;
+    }
+    p->line = 0;
+    return 0;
+
+error:
+    free(txt);
+    return -1;
+}
+
+static int parseint(Parser *p, int *intval)
+{
+    if (*p->line == '\n') err("Empty value");
+    char *tmp = strchr(p->line, '\n');
+    if (!tmp) err("Expected end of line");
+    skipwsb(tmp);
+    if (tmp == p->line) err("Empty value");
+    errno = 0;
+    char *endp;
+    long tmpval = strtol(p->line, &endp, 10);
+    if (endp != tmp) err("Non-numeric value");
+    if (errno == ERANGE || tmpval < INT_MIN || tmpval > INT_MAX)
+    {
+	err("Value out of range");
+    }
+    *intval = tmpval;
+    p->line = 0;
+    return 0;
+
+error:
+    return -1;
+}
+
+static int parseargvals(Parser *p, CDArg *arg)
+{
+    for (;;)
+    {
+	if (!p->line)
+	{
+	    if (!nextline) break;
+	}
+	skipws(p->line);
+	if (!*p->line) err("Expected end of line");
+
+	if (*p->line == '\n')
+	{
+	    p->line = 0;
+	    continue;
+	}
+	if (*p->line == '[')
+	{
+	    break;
+	}
+	char *tmp;
+	if (isws(*p->line) || *p->line == ':') err("Empty key");
+	else tmp = strchr(p->line, ':');
+	if (!tmp || tmp == p->line) err("Expected key");
+	*tmp = 0;
+	CliDoc **val = 0;
+	int *intval = 0;
+	if (!strcmp(p->line, "description")) val = &arg->description;
+	else if (!strcmp(p->line, "default")) val = &arg->def;
+	else if (!strcmp(p->line, "min")) val = &arg->min;
+	else if (!strcmp(p->line, "max")) val = &arg->max;
+	else if (!strcmp(p->line, "group")) intval = &arg->group;
+	else if (!strcmp(p->line, "optional")) intval = &arg->optional;
+	else err("Unknown key");
+	if (val && *val) err("Duplicate key");
+	p->line = tmp+1;
+	if (intval)
+	{
+	    if (parseint(p, intval) < 0) goto error;
+	}
+	else if (parseval(p, val, (CliDoc *)arg) < 0) goto error;
+    }
+    return 0;
+
+error:
+    return -1;
+}
+
+static int parseflag(Parser *p, CDRoot *root)
+{
+    char *tmp = strchr(p->line, '\n');
+    if (!tmp) err("Expected end of line");
+    skipwsb(tmp);
+    --tmp;
+    if (tmp <= p->line) err("Unexpected end of line");
+    if (*tmp != ']') err("Tag not closed");
+    if (!isws(p->line[1]) && p->line[1] != ']')
+    {
+	err("Missing or invalid flag character");
+    }
+    CDFlag *flag = xmalloc(sizeof *flag);
+    memset(flag, 0, sizeof *flag);
+    flag->group = -1;
+    flag->optional = -1;
+    flag->parent = (CliDoc *)root;
+    flag->type = CT_FLAG;
+    root->flags = xrealloc(root->flags,
+	    (root->nflags+1) * sizeof *root->flags);
+    root->flags[root->nflags++] = flag;
+    flag->flag = *p->line++;
+    skipws(p->line);
+    if (p->line != tmp)
+    {
+	size_t arglen = tmp - p->line;
+	flag->arg = xmalloc(arglen + 1);
+	strncpy(flag->arg, p->line, arglen);
+	flag->arg[arglen] = 0;
+    }
+    p->line = 0;
+    return parseargvals(p, (CDArg *)flag);
+
+error:
+    return -1;
+}
+
+static int parsearg(Parser *p, CDRoot *root)
+{
+    char *tmp = strchr(p->line, '\n');
+    if (!tmp) err("Expected end of line");
+    skipwsb(tmp);
+    --tmp;
+    if (tmp <= p->line) err("Unexpected end of line");
+    if (*tmp != ']') err("Tag not closed");
+    skipws(p->line);
+    if (p->line == tmp) err("Missing argument name");
+    CDArg *arg = xmalloc(sizeof *arg);
+    memset(arg, 0, sizeof *arg);
+    arg->group = -1;
+    arg->optional = -1;
+    arg->parent = (CliDoc *)root;
+    arg->type = CT_ARG;
+    root->args = xrealloc(root->args, (root->nargs+1) * sizeof *root->args);
+    root->args[root->nargs++] = arg;
+    size_t arglen = tmp - p->line;
+    arg->arg = xmalloc(arglen + 1);
+    strncpy(arg->arg, p->line, arglen);
+    arg->arg[arglen] = 0;
+    p->line = 0;
+    return parseargvals(p, arg);
+
+error:
+    return -1;
+}
+
+static int parse(CDRoot *root, FILE *doc)
+{
+    Parser parser = { doc, 0, 0, {0} };
+    Parser *p = &parser;
+
+    for (;;)
+    {
+	if (!p->line)
+	{
+	    if (!nextline) break;
+	}
+	skipws(p->line);
+	if (!*p->line) err("Expected end of line");
+
+	if (*p->line == '\n')
+	{
+	    p->line = 0;
+	    continue;
+	}
+
+	if (*p->line == '[')
+	{
+	    if (!strncmp(p->line+1, "flag ", 5))
+	    {
+		p->line += 6;
+		if (parseflag(p, root) < 0) goto error;
+	    }
+	    else if (!strncmp(p->line+1, "arg ", 4))
+	    {
+		p->line += 5;
+		if (parsearg(p, root) < 0) goto error;
+	    }
+	    else err("Unknown tag");
+	    continue;
+	}
+
+	char *tmp;
+	if (isws(*p->line) || *p->line == ':') err("Empty key");
+	else tmp = strchr(p->line, ':');
+	if (!tmp || tmp == p->line) err("Expected key");
+	*tmp = 0;
+	int *intval = 0;
+	CliDoc **val = 0;
+	if (!strcmp(p->line, "name")) val = &root->name;
+	else if (!strcmp(p->line, "version")) val = &root->version;
+	else if (!strcmp(p->line, "author")) val = &root->author;
+	else if (!strcmp(p->line, "license")) val = &root->license;
+	else if (!strcmp(p->line, "description")) val = &root->description;
+	else if (!strcmp(p->line, "defgroup")) intval = &root->defgroup;
+	else err("Unknown key");
+	if (val && *val) err("Duplicate key");
+	p->line = tmp+1;
+	if (intval)
+	{
+	    if (parseint(p, intval) < 0) goto error;
+	}
+	else if (parseval(p, val, (CliDoc *)root) < 0) goto error;
+    }
+    return 0;
+
+error:
+    return -1;
+}
 
 CliDoc *CliDoc_create(FILE *doc)
 {
@@ -97,282 +399,12 @@ CliDoc *CliDoc_create(FILE *doc)
     memset(self, 0, sizeof *self);
     self->type = CT_ROOT;
 
-    CliDoc *parent = (CliDoc *)self;
-    CliDoc **val;
-    CDArg *arg;
-    CDFlag *flag;
-    int *intval;
-    ParseState state = PS_ROOT;
-
-    char buf[1024];
-    char name[32];
-    size_t namelen;
-    char *line = 0;
-    char *tmp;
-    char *endp;
-    long tmpval;
-    unsigned long lineno = 0;
-    for (;;)
+    if (parse(self, doc) < 0)
     {
-	if (!line)
-	{
-	    if (!nextline) break;
-	}
-	skipws(line);
-	if (!*line) err("Expected end of line");
-
-	switch (state)
-	{
-	    case PS_ROOT:
-		if (*line == '\n')
-		{
-		    line = 0;
-		    break;
-		}
-		if (*line == '[')
-		{
-		    if (!strncmp(line+1, "flag ", 5))
-		    {
-			line += 6;
-			state = PS_FLAG;
-		    }
-		    else if (!strncmp(line+1, "arg ", 4))
-		    {
-			line += 5;
-			state = PS_ARG;
-		    }
-		    break;
-		}
-		else if (isws(*line) || *line == ':') err("Empty key");
-		else tmp = strchr(line, ':');
-		if (!tmp || tmp == line) err("Expected key");
-		namelen = tmp - line;
-		if (namelen > 31) err("Key too long");
-		strncpy(name, line, namelen);
-		name[namelen] = 0;
-		val = 0;
-		intval = 0;
-		if (!strcmp(name, "name")) val = &self->name;
-		else if (!strcmp(name, "version")) val = &self->version;
-		else if (!strcmp(name, "author")) val = &self->author;
-		else if (!strcmp(name, "license")) val = &self->license;
-		else if (!strcmp(name, "description")) val = &self->description;
-		else if (!strcmp(name, "defgroup")) intval = &self->defgroup;
-		else err("Unknown key");
-		if (val && *val) err("Duplicate key");
-		line = tmp+1;
-		state = val ? PS_VAL : PS_INTVAL;
-		break;
-
-	    case PS_ARGVALS:
-		if (*line == '\n')
-		{
-		    line = 0;
-		    break;
-		}
-		if (*line == '[')
-		{
-		    parent = arg->parent;
-		    goto parent;
-		}
-		else if (isws(*line) || *line == ':') err("Empty key");
-		else tmp = strchr(line, ':');
-		if (!tmp || tmp == line) err("Expected key");
-		namelen = tmp - line;
-		if (namelen > 31) err("Key too long");
-		strncpy(name, line, namelen);
-		name[namelen] = 0;
-		val = 0;
-		intval = 0;
-		if (!strcmp(name, "description")) val = &arg->description;
-		else if (!strcmp(name, "default")) val = &arg->def;
-		else if (!strcmp(name, "min")) val = &arg->min;
-		else if (!strcmp(name, "max")) val = &arg->max;
-		else if (!strcmp(name, "group")) intval = &arg->group;
-		else if (!strcmp(name, "optional")) intval = &arg->optional;
-		else err("Unknown key");
-		if (val && *val) err("Duplicate key");
-		line = tmp+1;
-		state = val ? PS_VAL : PS_INTVAL;
-		break;
-
-	    case PS_VAL:
-		if (*line == '\n')
-		{
-		    int done = 0;
-		    char *txt = 0;
-		    size_t txtlen = 0;
-		    for (;;) {
-			if (!nextline) err("Unexpected end of file");
-			skipws(line);
-			if (*line == '\n') continue;
-			while (!done && *line != '\n')
-			{
-			    if (*line == '.' && line[1] == '\n')
-			    {
-				done = 1;
-				break;
-			    }
-			    tmp = strchr(line, '\n');
-			    if (!tmp) err("Expected end of line");
-			    skipwsb(tmp);
-			    *tmp++ = ' ';
-			    *tmp = 0;
-			    size_t linelen = strlen(line);
-			    txt = xrealloc(txt, txtlen + linelen + 1);
-			    strcpy(txt+txtlen, line);
-			    txtlen += linelen;
-			    if (!nextline) err("Unexpected end of file");
-			    skipws(line);
-			}
-			txt[txtlen-1] = 0;
-			CDText *text = xmalloc(sizeof *text);
-			text->parent = parent;
-			text->type = CT_TEXT;
-			text->text = txt;
-			txt = 0;
-			txtlen = 0;
-			if (!*val) *val = (CliDoc *)text;
-			else if ((*val)->type == CT_LIST)
-			{
-			    text->parent = *val;
-			    CDList *list = (CDList *)*val;
-			    list->c = xrealloc(list->c,
-				    (list->n+1) * sizeof *list->c);
-			    list->c[list->n++] = (CliDoc *)text;
-			}
-			else
-			{
-			    CDText *first = (CDText *)*val;
-			    CDList *list = xmalloc(sizeof *list);
-			    list->parent = parent;
-			    list->type = CT_LIST;
-			    list->n = 2;
-			    list->c = xmalloc(2 * sizeof *list->c);
-			    first->parent = (CliDoc *)list;
-			    text->parent = (CliDoc *)list;
-			    list->c[0] = (CliDoc *)first;
-			    list->c[1] = (CliDoc *)text;
-			    *val = (CliDoc *)list;
-			}
-			if (done) break;
-		    }
-		}
-		else
-		{
-		    tmp = strchr(line, '\n');
-		    if (!tmp) err("Expected end of line");
-		    skipwsb(tmp);
-		    *tmp = 0;
-		    CDText *text = xmalloc(sizeof *text);
-		    text->parent = parent;
-		    text->type = CT_TEXT;
-		    text->text = malloc(strlen(line)+1);
-		    strcpy(text->text, line);
-		    *val = (CliDoc *)text;
-		}
-		line = 0;
-		goto parent;
-
-	    case PS_INTVAL:
-		if (*line == '\n') err("Empty value");
-		tmp = strchr(line, '\n');
-		if (!tmp) err("Expected end of line");
-		skipwsb(tmp);
-		if (tmp == line) err("Empty value");
-		errno = 0;
-		tmpval = strtol(line, &endp, 10);
-		if (endp != tmp) err("Non-numeric value");
-		if (errno == ERANGE || tmpval < INT_MIN || tmpval > INT_MAX)
-		{
-		    err("Value out of range");
-		}
-		*intval = tmpval;
-		line = 0;
-		goto parent;
-
-	    case PS_FLAG:
-		tmp = strchr(line, '\n');
-		if (!tmp) err("Expected end of line");
-		skipwsb(tmp);
-		--tmp;
-		if (tmp <= line) err("Unexpected end of line");
-		if (*tmp != ']') err("Missing flag character");
-		if (!isws(line[1]) && line[1] != ']')
-		{
-		    err("Invalid flag character");
-		}
-		flag = xmalloc(sizeof *flag);
-		memset(flag, 0, sizeof *flag);
-		flag->group = -1;
-		flag->optional = -1;
-		flag->parent = parent;
-		flag->type = CT_FLAG;
-		self->flags = xrealloc(self->flags,
-			(self->nflags+1) * sizeof *self->flags);
-		self->flags[self->nflags++] = flag;
-		flag->flag = *line++;
-		skipws(line);
-		if (line != tmp)
-		{
-		    size_t arglen = tmp - line;
-		    flag->arg = xmalloc(arglen + 1);
-		    strncpy(flag->arg, line, arglen);
-		    flag->arg[arglen] = 0;
-		}
-		parent = (CliDoc *)flag;
-		arg = (CDArg *)flag;
-		state = PS_ARGVALS;
-		line = 0;
-		break;
-
-	    case PS_ARG:
-		tmp = strchr(line, '\n');
-		if (!tmp) err("Expected end of line");
-		skipwsb(tmp);
-		--tmp;
-		if (tmp <= line) err("Unexpected end of line");
-		if (*tmp != ']') err("Missing argument name");
-		arg = xmalloc(sizeof *arg);
-		memset(arg, 0, sizeof *arg);
-		arg->group = -1;
-		arg->optional = -1;
-		arg->parent = parent;
-		arg->type = CT_ARG;
-		self->args = xrealloc(self->args,
-			(self->nargs+1) * sizeof *self->args);
-		self->args[self->nargs++] = arg;
-		skipws(line);
-		if (line == tmp) err("Missing argument name");
-		size_t arglen = tmp - line;
-		arg->arg = xmalloc(arglen + 1);
-		strncpy(arg->arg, line, arglen);
-		arg->arg[arglen] = 0;
-		parent = (CliDoc *)arg;
-		state = PS_ARGVALS;
-		line = 0;
-		break;
-
-	    parent:
-		switch (parent->type)
-		{
-		    case CT_ARG:
-		    case CT_FLAG:
-			state = PS_ARGVALS;
-			break;
-		    default:
-			state = PS_ROOT;
-			break;
-		}
-		break;
-	}
+	CliDoc_destroy((CliDoc *)self);
+	return 0;
     }
-
     return (CliDoc *)self;
-
-error:
-    CliDoc_destroy((CliDoc *)self);
-    return 0;
 }
 
 ContentType CliDoc_type(const CliDoc *self)
