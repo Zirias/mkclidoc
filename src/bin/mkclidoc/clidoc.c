@@ -28,9 +28,11 @@ struct CDRoot
     CliDoc base;
     CliDoc *name;
     CliDoc *version;
+    CliDoc *comment;
     CliDoc *author;
     CliDoc *license;
     CliDoc *description;
+    CliDoc *date;
     CDFlag **flags;
     CDArg **args;
     size_t nflags;
@@ -78,7 +80,7 @@ struct CDTable
     CliDoc base;
     size_t width;
     size_t height;
-    CDText **cells;
+    char **cells;
 };
 
 struct CDText
@@ -182,16 +184,13 @@ static int parsetable(Parser *p, CliDoc **val, CliDoc *parent)
 	    }
 	    char *end = tmp;
 	    skipwsb(end);
-	    CDText *text = 0;
+	    char *text = 0;
 	    size_t txtlen = end > p->line ? end - p->line : 0;
 	    if (txtlen)
 	    {
-		text = xmalloc(sizeof *text);
-		text->base.parent = (CliDoc *)table;
-		text->base.type = CT_TEXT;
-		text->text = xmalloc(txtlen + 1);
-		strncpy(text->text, p->line, txtlen);
-		text->text[txtlen] = 0;
+		text = xmalloc(txtlen + 1);
+		strncpy(text, p->line, txtlen);
+		text[txtlen] = 0;
 	    }
 	    table->cells[table->height*table->width + x] = text;
 	    p->line = tmp+1;
@@ -549,9 +548,11 @@ static int parse(CDRoot *root, FILE *doc)
 	CliDoc **val = 0;
 	if (!strcmp(p->line, "name")) val = &root->name;
 	else if (!strcmp(p->line, "version")) val = &root->version;
+	else if (!strcmp(p->line, "comment")) val = &root->comment;
 	else if (!strcmp(p->line, "author")) val = &root->author;
 	else if (!strcmp(p->line, "license")) val = &root->license;
 	else if (!strcmp(p->line, "description")) val = &root->description;
+	else if (!strcmp(p->line, "date")) val = &root->date;
 	else if (!strcmp(p->line, "defgroup")) intval = &root->defgroup;
 	else err("Unknown key");
 	if (val && *val) err("Duplicate key");
@@ -604,6 +605,12 @@ const CliDoc *CDRoot_version(const CliDoc *self)
     return ((const CDRoot *)self)->version;
 }
 
+const CliDoc *CDRoot_comment(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->comment;
+}
+
 const CliDoc *CDRoot_author(const CliDoc *self)
 {
     assert(self->type == CT_ROOT);
@@ -620,6 +627,12 @@ const CliDoc *CDRoot_description(const CliDoc *self)
 {
     assert(self->type == CT_ROOT);
     return ((const CDRoot *)self)->description;
+}
+
+const CliDoc *CDRoot_date(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->date;
 }
 
 size_t CDRoot_nflags(const CliDoc *self)
@@ -644,6 +657,115 @@ const CliDoc *CDRoot_arg(const CliDoc *self, size_t i)
 {
     assert(i < CDRoot_nargs(self));
     return (const CliDoc *)((const CDRoot *)self)->args[i];
+}
+
+int CDRoot_defgroup(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->defgroup;
+}
+
+const CliDoc *CDArg_description(const CliDoc *self)
+{
+    assert(self->type == CT_ARG || self->type == CT_FLAG);
+    return ((const CDArg *)self)->description;
+}
+
+const CliDoc *CDArg_default(const CliDoc *self)
+{
+    assert(self->type == CT_ARG || self->type == CT_FLAG);
+    return ((const CDArg *)self)->def;
+}
+
+const CliDoc *CDArg_min(const CliDoc *self)
+{
+    assert(self->type == CT_ARG || self->type == CT_FLAG);
+    return ((const CDArg *)self)->min;
+}
+
+const CliDoc *CDArg_max(const CliDoc *self)
+{
+    assert(self->type == CT_ARG || self->type == CT_FLAG);
+    return ((const CDArg *)self)->max;
+}
+
+const char *CDArg_arg(const CliDoc *self)
+{
+    assert(self->type == CT_ARG || self->type == CT_FLAG);
+    return ((const CDArg *)self)->arg;
+}
+
+int CDArg_group(const CliDoc *self)
+{
+    assert(self->type == CT_ARG || self->type == CT_FLAG);
+    return ((const CDArg *)self)->group;
+}
+
+int CDArg_optional(const CliDoc *self)
+{
+    assert(self->type == CT_ARG || self->type == CT_FLAG);
+    return ((const CDArg *)self)->optional;
+}
+
+char CDFlag_flag(const CliDoc *self)
+{
+    assert(self->type == CT_FLAG);
+    return ((const CDFlag *)self)->flag;
+}
+
+size_t CDList_length(const CliDoc *self)
+{
+    assert(self->type == CT_LIST);
+    return ((const CDList *)self)->n;
+}
+
+const CliDoc *CDList_entry(const CliDoc *self, size_t i)
+{
+    assert(i < CDList_length(self));
+    return ((const CDList *)self)->c[i];
+}
+
+size_t CDDict_length(const CliDoc *self)
+{
+    assert(self->type == CT_DICT);
+    return ((const CDDict *)self)->n;
+}
+
+const char *CDDict_key(const CliDoc *self, size_t i)
+{
+    assert(i < CDDict_length(self));
+    return ((const CDDict *)self)->v[i].key;
+}
+
+const CliDoc *CDDict_val(const CliDoc *self, size_t i)
+{
+    assert(i < CDDict_length(self));
+    return ((const CDDict *)self)->v[i].val;
+}
+
+size_t CDTable_width(const CliDoc *self)
+{
+    assert(self->type == CT_TABLE);
+    return ((const CDTable *)self)->width;
+}
+
+size_t CDTable_height(const CliDoc *self)
+{
+    assert(self->type == CT_TABLE);
+    return ((const CDTable *)self)->height;
+}
+
+const char *CDTable_cell(const CliDoc *self, size_t x, size_t y)
+{
+    assert(x < CDTable_width(self) && y < CDTable_height(self));
+    const CDTable *table = (const CDTable *)self;
+    return table->cells[table->width * y + x];
+}
+
+const char *CDText_str(const CliDoc *self)
+{
+    assert(self->type == CT_TEXT);
+    return ((const CDText *)self)->text;
 }
 
 static void CDText_destroy(CliDoc *self)
@@ -678,7 +800,7 @@ static void CDTable_destroy(CliDoc *self)
     CDTable *table = (CDTable *)self;
     for (size_t i = 0; i < table->width * table->height; ++i)
     {
-	CliDoc_destroy((CliDoc *)table->cells[i]);
+	free(table->cells[i]);
     }
     free(table->cells);
 }
