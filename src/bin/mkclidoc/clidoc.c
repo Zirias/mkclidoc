@@ -2,6 +2,7 @@
 
 #include "util.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -372,6 +373,70 @@ CliDoc *CliDoc_create(FILE *doc)
 error:
     CliDoc_destroy((CliDoc *)self);
     return 0;
+}
+
+ContentType CliDoc_type(const CliDoc *self)
+{
+    return self->type;
+}
+
+const CliDoc *CliDoc_parent(const CliDoc *self)
+{
+    return self->parent;
+}
+
+const CliDoc *CDRoot_name(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->name;
+}
+
+const CliDoc *CDRoot_version(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->version;
+}
+
+const CliDoc *CDRoot_author(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->author;
+}
+
+const CliDoc *CDRoot_license(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->license;
+}
+
+const CliDoc *CDRoot_description(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->description;
+}
+
+size_t CDRoot_nflags(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->nflags;
+}
+
+const CliDoc *CDRoot_flag(const CliDoc *self, size_t i)
+{
+    assert(i < CDRoot_nflags(self));
+    return (const CliDoc *)((const CDRoot *)self)->flags[i];
+}
+
+size_t CDRoot_nargs(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->nargs;
+}
+
+const CliDoc *CDRoot_arg(const CliDoc *self, size_t i)
+{
+    assert(i < CDRoot_nargs(self));
+    return (const CliDoc *)((const CDRoot *)self)->args[i];
 }
 
 static void CDText_destroy(CliDoc *self)
