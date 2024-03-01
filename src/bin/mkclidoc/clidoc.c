@@ -16,18 +16,15 @@ C_CLASS_DECL(CDList);
 C_CLASS_DECL(CDDict);
 C_CLASS_DECL(CDText);
 
-#define BASE_FIELDS \
-    CliDoc *parent; \
-    ContentType type
-
 struct CliDoc
 {
-    BASE_FIELDS;
+    CliDoc *parent;
+    ContentType type;
 };
 
 struct CDRoot
 {
-    BASE_FIELDS;
+    CliDoc base;
     CliDoc *name;
     CliDoc *version;
     CliDoc *author;
@@ -40,37 +37,34 @@ struct CDRoot
     int defgroup;
 };
 
-#define ARG_FIELDS \
-    BASE_FIELDS; \
-    CliDoc *description; \
-    CliDoc *def; \
-    CliDoc *min; \
-    CliDoc *max; \
-    char *arg; \
-    int group; \
-    int optional
-
 struct CDArg
 {
-    ARG_FIELDS;
+    CliDoc base;
+    CliDoc *description;
+    CliDoc *def;
+    CliDoc *min;
+    CliDoc *max;
+    char *arg;
+    int group;
+    int optional;
 };
 
 struct CDFlag
 {
-    ARG_FIELDS;
+    CDArg base;
     char flag;
 };
 
 struct CDList
 {
-    BASE_FIELDS;
+    CliDoc base;
     size_t n;
     CliDoc **c;
 };
 
 struct CDDict
 {
-    BASE_FIELDS;
+    CliDoc base;
     size_t n;
     struct {
 	char *key;
@@ -80,19 +74,9 @@ struct CDDict
 
 struct CDText
 {
-    BASE_FIELDS;
+    CliDoc base;
     char *text;
 };
-
-typedef enum ParseState
-{
-    PS_ROOT,
-    PS_ARGVALS,
-    PS_VAL,
-    PS_INTVAL,
-    PS_FLAG,
-    PS_ARG
-} ParseState;
 
 typedef struct Parser
 {
@@ -135,8 +119,8 @@ static void setoradd(CliDoc **val, CliDoc *item)
     else
     {
 	CDList *list = xmalloc(sizeof *list);
-	list->parent = item->parent;
-	list->type = CT_LIST;
+	list->base.parent = item->parent;
+	list->base.type = CT_LIST;
 	list->n = 2;
 	list->c = xmalloc(2 * sizeof *list->c);
 	(*val)->parent = (CliDoc *)list;
@@ -151,8 +135,8 @@ static int parsedict(Parser *p, CliDoc **val, CliDoc *parent)
 {
     CDDict *dict = xmalloc(sizeof *dict);
     memset(dict, 0, sizeof *dict);
-    dict->parent = parent;
-    dict->type = CT_DICT;
+    dict->base.parent = parent;
+    dict->base.type = CT_DICT;
 
     char *tmp = 0;
     while (isdict(tmp))
@@ -194,8 +178,8 @@ static int parsedict(Parser *p, CliDoc **val, CliDoc *parent)
 	txt[--txtlen] = 0;
 
 	CDText *text = xmalloc(sizeof *text);
-	text->parent = (CliDoc *)dict;
-	text->type = CT_TEXT;
+	text->base.parent = (CliDoc *)dict;
+	text->base.type = CT_TEXT;
 	text->text = txt;
 
 	dict->v = xrealloc(dict->v, (dict->n+1) * sizeof *dict->v);
@@ -251,8 +235,8 @@ static int parseval(Parser *p, CliDoc **val, CliDoc *parent)
 	    }
 	    txt[txtlen-1] = 0;
 	    CDText *text = xmalloc(sizeof *text);
-	    text->parent = parent;
-	    text->type = CT_TEXT;
+	    text->base.parent = parent;
+	    text->base.type = CT_TEXT;
 	    text->text = txt;
 	    txt = 0;
 	    txtlen = 0;
@@ -271,8 +255,8 @@ static int parseval(Parser *p, CliDoc **val, CliDoc *parent)
 	skipwsb(tmp);
 	*tmp = 0;
 	CDText *text = xmalloc(sizeof *text);
-	text->parent = parent;
-	text->type = CT_TEXT;
+	text->base.parent = parent;
+	text->base.type = CT_TEXT;
 	text->text = malloc(strlen(p->line)+1);
 	strcpy(text->text, p->line);
 	*val = (CliDoc *)text;
@@ -370,10 +354,10 @@ static int parseflag(Parser *p, CDRoot *root)
     }
     CDFlag *flag = xmalloc(sizeof *flag);
     memset(flag, 0, sizeof *flag);
-    flag->group = -1;
-    flag->optional = -1;
-    flag->parent = (CliDoc *)root;
-    flag->type = CT_FLAG;
+    flag->base.group = -1;
+    flag->base.optional = -1;
+    flag->base.base.parent = (CliDoc *)root;
+    flag->base.base.type = CT_FLAG;
     root->flags = xrealloc(root->flags,
 	    (root->nflags+1) * sizeof *root->flags);
     root->flags[root->nflags++] = flag;
@@ -382,9 +366,9 @@ static int parseflag(Parser *p, CDRoot *root)
     if (p->line != tmp)
     {
 	size_t arglen = tmp - p->line;
-	flag->arg = xmalloc(arglen + 1);
-	strncpy(flag->arg, p->line, arglen);
-	flag->arg[arglen] = 0;
+	flag->base.arg = xmalloc(arglen + 1);
+	strncpy(flag->base.arg, p->line, arglen);
+	flag->base.arg[arglen] = 0;
     }
     p->line = 0;
     return parseargvals(p, (CDArg *)flag);
@@ -407,8 +391,8 @@ static int parsearg(Parser *p, CDRoot *root)
     memset(arg, 0, sizeof *arg);
     arg->group = -1;
     arg->optional = -1;
-    arg->parent = (CliDoc *)root;
-    arg->type = CT_ARG;
+    arg->base.parent = (CliDoc *)root;
+    arg->base.type = CT_ARG;
     root->args = xrealloc(root->args, (root->nargs+1) * sizeof *root->args);
     root->args[root->nargs++] = arg;
     size_t arglen = tmp - p->line;
@@ -490,7 +474,7 @@ CliDoc *CliDoc_create(FILE *doc)
 {
     CDRoot *self = xmalloc(sizeof *self);
     memset(self, 0, sizeof *self);
-    self->type = CT_ROOT;
+    self->base.type = CT_ROOT;
 
     if (parse(self, doc) < 0)
     {
