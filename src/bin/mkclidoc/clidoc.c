@@ -13,6 +13,7 @@ C_CLASS_DECL(CDRoot);
 C_CLASS_DECL(CDArg);
 C_CLASS_DECL(CDFlag);
 C_CLASS_DECL(CDList);
+C_CLASS_DECL(CDDict);
 C_CLASS_DECL(CDText);
 
 #define BASE_FIELDS \
@@ -39,19 +40,6 @@ struct CDRoot
     int defgroup;
 };
 
-struct CDList
-{
-    BASE_FIELDS;
-    size_t n;
-    CliDoc **c;
-};
-
-struct CDText
-{
-    BASE_FIELDS;
-    char *text;
-};
-
 #define ARG_FIELDS \
     BASE_FIELDS; \
     CliDoc *description; \
@@ -73,6 +61,29 @@ struct CDFlag
     char flag;
 };
 
+struct CDList
+{
+    BASE_FIELDS;
+    size_t n;
+    CliDoc **c;
+};
+
+struct CDDict
+{
+    BASE_FIELDS;
+    size_t n;
+    struct {
+	char *key;
+	CliDoc *val;
+    } *v;
+};
+
+struct CDText
+{
+    BASE_FIELDS;
+    char *text;
+};
+
 typedef enum ParseState
 {
     PS_ROOT,
@@ -91,6 +102,8 @@ typedef struct Parser
     char buf[1024];
 } Parser;
 
+static void setoradd(CliDoc **val, CliDoc *item);
+static int parsedict(Parser *p, CliDoc **val, CliDoc *parent);
 static int parseval(Parser *p, CliDoc **val, CliDoc *parent);
 static int parseint(Parser *p, int *intval);
 static int parseargvals(Parser *p, CDArg *arg);
@@ -106,6 +119,96 @@ static int parse(CDRoot *root, FILE *doc);
     goto error; } while (0)
 #define nextline (p->line = ((++p->lineno), \
 	    fgets(p->buf, sizeof p->buf, p->doc)))
+#define isdict(t) (*p->line == '-' && p->line[1] == ' ' && p->line[2] == '[' \
+	&& ((t)=strchr(p->line, ']')) && (t)[1] == ':')
+
+static void setoradd(CliDoc **val, CliDoc *item)
+{
+    if (!*val) *val = item;
+    else if ((*val)->type == CT_LIST)
+    {
+	item->parent = *val;
+	CDList *list = (CDList *)*val;
+	list->c = xrealloc(list->c, (list->n+1) * sizeof *list->c);
+	list->c[list->n++] = item;
+    }
+    else
+    {
+	CDList *list = xmalloc(sizeof *list);
+	list->parent = item->parent;
+	list->type = CT_LIST;
+	list->n = 2;
+	list->c = xmalloc(2 * sizeof *list->c);
+	(*val)->parent = (CliDoc *)list;
+	item->parent = (CliDoc *)list;
+	list->c[0] = *val;
+	list->c[1] = item;
+	*val = (CliDoc *)list;
+    }
+}
+
+static int parsedict(Parser *p, CliDoc **val, CliDoc *parent)
+{
+    CDDict *dict = xmalloc(sizeof *dict);
+    memset(dict, 0, sizeof *dict);
+    dict->parent = parent;
+    dict->type = CT_DICT;
+
+    char *tmp = 0;
+    while (isdict(tmp))
+    {
+	*tmp = 0;
+	p->line += 3;
+	skipws(p->line);
+	if (!*p->line) err("Empty dictionary key");
+	char *key = xmalloc(strlen(p->line)+1);
+	strcpy(key, p->line);
+	p->line = tmp+2;
+	skipws(p->line);
+	if (*p->line == '\n')
+	{
+	    if (!nextline) err("Unexpected end of file");
+	    skipws(p->line);
+	}
+
+	size_t txtlen = 0;
+	char *txt = 0;
+	for (;;)
+	{
+	    if (*p->line == '\n' ||
+		    (*p->line == '.' && p->line[1] == '\n')) break;
+	    if (isdict(tmp)) break;
+	    tmp = strchr(p->line, '\n');
+	    if (!tmp) err("Expected end of line");
+	    skipwsb(tmp);
+	    size_t linelen = tmp - p->line;
+	    txt = xrealloc(txt, txtlen + linelen + 2);
+	    strncpy(txt + txtlen, p->line, linelen);
+	    txt[txtlen + ++linelen] = ' ';
+	    txt[txtlen + linelen] = 0;
+	    txtlen += linelen;
+	    if (!nextline) err("Unexpected end of file");
+	    skipws(p->line);
+	}
+	if (!txt) err("Empty dictionary value");
+	txt[--txtlen] = 0;
+
+	CDText *text = xmalloc(sizeof *text);
+	text->parent = (CliDoc *)dict;
+	text->type = CT_TEXT;
+	text->text = txt;
+
+	dict->v = xrealloc(dict->v, (dict->n+1) * sizeof *dict->v);
+	dict->v[dict->n].key = key;
+	dict->v[dict->n++].val = (CliDoc *)text;
+    }
+    setoradd(val, (CliDoc *)dict);
+    return 0;
+
+error:
+    CliDoc_destroy((CliDoc *)dict);
+    return -1;
+}
 
 static int parseval(Parser *p, CliDoc **val, CliDoc *parent)
 {
@@ -115,15 +218,23 @@ static int parseval(Parser *p, CliDoc **val, CliDoc *parent)
     {
 	int done = 0;
 	size_t txtlen = 0;
-	for (;;) {
-	    if (!nextline) err("Unexpected end of file");
-	    skipws(p->line);
-	    if (*p->line == '\n') continue;
-	    while (!done && *p->line != '\n')
+	while (!done) {
+	    while (*p->line == '\n')
+	    {
+		if (!nextline) err("Unexpected end of file");
+		skipws(p->line);
+	    }
+	    int havedict = 0;
+	    while (*p->line != '\n')
 	    {
 		if (*p->line == '.' && p->line[1] == '\n')
 		{
 		    done = 1;
+		    break;
+		}
+		if (isdict(tmp))
+		{
+		    havedict = 1;
 		    break;
 		}
 		tmp = strchr(p->line, '\n');
@@ -145,30 +256,12 @@ static int parseval(Parser *p, CliDoc **val, CliDoc *parent)
 	    text->text = txt;
 	    txt = 0;
 	    txtlen = 0;
-	    if (!*val) *val = (CliDoc *)text;
-	    else if ((*val)->type == CT_LIST)
+	    setoradd(val, (CliDoc *)text);
+	    if (havedict)
 	    {
-		text->parent = *val;
-		CDList *list = (CDList *)*val;
-		list->c = xrealloc(list->c,
-			(list->n+1) * sizeof *list->c);
-		list->c[list->n++] = (CliDoc *)text;
+		if (parsedict(p, val, parent) < 0) goto error;
+		if (*p->line == '.' && p->line[1] == '\n') done = 1;
 	    }
-	    else
-	    {
-		CDText *first = (CDText *)*val;
-		CDList *list = xmalloc(sizeof *list);
-		list->parent = parent;
-		list->type = CT_LIST;
-		list->n = 2;
-		list->c = xmalloc(2 * sizeof *list->c);
-		first->parent = (CliDoc *)list;
-		text->parent = (CliDoc *)list;
-		list->c[0] = (CliDoc *)first;
-		list->c[1] = (CliDoc *)text;
-		*val = (CliDoc *)list;
-	    }
-	    if (done) break;
 	}
     }
     else
@@ -487,6 +580,17 @@ static void CDList_destroy(CliDoc *self)
     free(list->c);
 }
 
+static void CDDict_destroy(CliDoc *self)
+{
+    CDDict *dict = (CDDict *)self;
+    for (size_t i = 0; i < dict->n; ++i)
+    {
+	free(dict->v[i].key);
+	CliDoc_destroy(dict->v[i].val);
+    }
+    free(dict->v);
+}
+
 static void CDArg_destroy(CliDoc *self)
 {
     CDArg *arg = (CDArg *)self;
@@ -532,6 +636,7 @@ void CliDoc_destroy(CliDoc *self)
 	case CT_ARG:
 	case CT_FLAG: CDArg_destroy(self); break;
 	case CT_LIST: CDList_destroy(self); break;
+	case CT_DICT: CDDict_destroy(self); break;
 	case CT_TEXT: CDText_destroy(self); break;
 	default: break;
     }

@@ -13,6 +13,7 @@ typedef enum ContentType
     CT_ARG,
     CT_FLAG,
     CT_LIST,
+    CT_DICT,
     CT_TEXT
 } ContentType;
 
