@@ -6,19 +6,14 @@
 #include <stdio.h>
 
 C_CLASS_DECL(CliDoc);
-C_CLASS_DECL(CDContent);
-C_CLASS_DECL(CDList);
-C_CLASS_DECL(CDText);
-C_CLASS_DECL(CDArg);
-C_CLASS_DECL(CDFlag);
 
 typedef enum ContentType
 {
     CT_ROOT,
-    CT_LIST,
-    CT_TEXT,
     CT_ARG,
-    CT_FLAG
+    CT_FLAG,
+    CT_LIST,
+    CT_TEXT
 } ContentType;
 
 CliDoc *CliDoc_create(FILE *doc);

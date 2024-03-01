@@ -8,23 +8,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CONTENT_FIELDS \
-    CDContent *parent; \
-    ContentType type
+C_CLASS_DECL(CDRoot);
+C_CLASS_DECL(CDArg);
+C_CLASS_DECL(CDFlag);
+C_CLASS_DECL(CDList);
+C_CLASS_DECL(CDText);
 
-struct CDContent
-{
-    CONTENT_FIELDS;
-};
+#define BASE_FIELDS \
+    CliDoc *parent; \
+    ContentType type
 
 struct CliDoc
 {
-    CONTENT_FIELDS;
-    CDContent *name;
-    CDContent *version;
-    CDContent *author;
-    CDContent *license;
-    CDContent *description;
+    BASE_FIELDS;
+};
+
+struct CDRoot
+{
+    BASE_FIELDS;
+    CliDoc *name;
+    CliDoc *version;
+    CliDoc *author;
+    CliDoc *license;
+    CliDoc *description;
     CDFlag **flags;
     CDArg **args;
     size_t nflags;
@@ -34,23 +40,23 @@ struct CliDoc
 
 struct CDList
 {
-    CONTENT_FIELDS;
+    BASE_FIELDS;
     size_t n;
-    CDContent **c;
+    CliDoc **c;
 };
 
 struct CDText
 {
-    CONTENT_FIELDS;
+    BASE_FIELDS;
     char *text;
 };
 
 #define ARG_FIELDS \
-    CONTENT_FIELDS; \
-    CDContent *description; \
-    CDContent *def; \
-    CDContent *min; \
-    CDContent *max; \
+    BASE_FIELDS; \
+    CliDoc *description; \
+    CliDoc *def; \
+    CliDoc *min; \
+    CliDoc *max; \
     char *arg; \
     int group; \
     int optional
@@ -86,12 +92,12 @@ typedef enum ParseState
 
 CliDoc *CliDoc_create(FILE *doc)
 {
-    CliDoc *self = xmalloc(sizeof *self);
+    CDRoot *self = xmalloc(sizeof *self);
     memset(self, 0, sizeof *self);
     self->type = CT_ROOT;
 
-    CDContent *parent = (CDContent *)self;
-    CDContent **val;
+    CliDoc *parent = (CliDoc *)self;
+    CliDoc **val;
     CDArg *arg;
     CDFlag *flag;
     int *intval;
@@ -225,14 +231,14 @@ CliDoc *CliDoc_create(FILE *doc)
 			text->text = txt;
 			txt = 0;
 			txtlen = 0;
-			if (!*val) *val = (CDContent *)text;
+			if (!*val) *val = (CliDoc *)text;
 			else if ((*val)->type == CT_LIST)
 			{
 			    text->parent = *val;
 			    CDList *list = (CDList *)*val;
 			    list->c = xrealloc(list->c,
 				    (list->n+1) * sizeof *list->c);
-			    list->c[list->n++] = (CDContent *)text;
+			    list->c[list->n++] = (CliDoc *)text;
 			}
 			else
 			{
@@ -242,11 +248,11 @@ CliDoc *CliDoc_create(FILE *doc)
 			    list->type = CT_LIST;
 			    list->n = 2;
 			    list->c = xmalloc(2 * sizeof *list->c);
-			    first->parent = (CDContent *)list;
-			    text->parent = (CDContent *)list;
-			    list->c[0] = (CDContent *)first;
-			    list->c[1] = (CDContent *)text;
-			    *val = (CDContent *)list;
+			    first->parent = (CliDoc *)list;
+			    text->parent = (CliDoc *)list;
+			    list->c[0] = (CliDoc *)first;
+			    list->c[1] = (CliDoc *)text;
+			    *val = (CliDoc *)list;
 			}
 			if (done) break;
 		    }
@@ -262,7 +268,7 @@ CliDoc *CliDoc_create(FILE *doc)
 		    text->type = CT_TEXT;
 		    text->text = malloc(strlen(line)+1);
 		    strcpy(text->text, line);
-		    *val = (CDContent *)text;
+		    *val = (CliDoc *)text;
 		}
 		line = 0;
 		goto parent;
@@ -313,7 +319,7 @@ CliDoc *CliDoc_create(FILE *doc)
 		    strncpy(flag->arg, line, arglen);
 		    flag->arg[arglen] = 0;
 		}
-		parent = (CDContent *)flag;
+		parent = (CliDoc *)flag;
 		arg = (CDArg *)flag;
 		state = PS_ARGVALS;
 		line = 0;
@@ -341,7 +347,7 @@ CliDoc *CliDoc_create(FILE *doc)
 		arg->arg = xmalloc(arglen + 1);
 		strncpy(arg->arg, line, arglen);
 		arg->arg[arglen] = 0;
-		parent = (CDContent *)arg;
+		parent = (CliDoc *)arg;
 		state = PS_ARGVALS;
 		line = 0;
 		break;
@@ -361,15 +367,77 @@ CliDoc *CliDoc_create(FILE *doc)
 	}
     }
 
-    return self;
+    return (CliDoc *)self;
 
 error:
-    CliDoc_destroy(self);
+    CliDoc_destroy((CliDoc *)self);
     return 0;
+}
+
+static void CDText_destroy(CliDoc *self)
+{
+    CDText *text = (CDText *)self;
+    free(text->text);
+}
+
+static void CDList_destroy(CliDoc *self)
+{
+    CDList *list = (CDList *)self;
+    for (size_t i = 0; i < list->n; ++i)
+    {
+	CliDoc_destroy(list->c[i]);
+    }
+    free(list->c);
+}
+
+static void CDArg_destroy(CliDoc *self)
+{
+    CDArg *arg = (CDArg *)self;
+    CliDoc_destroy(arg->description);
+    CliDoc_destroy(arg->def);
+    CliDoc_destroy(arg->min);
+    CliDoc_destroy(arg->max);
+    free(arg->arg);
+}
+
+static void CDRoot_destroy(CliDoc *self)
+{
+    CDRoot *root = (CDRoot *)self;
+    CliDoc_destroy(root->name);
+    CliDoc_destroy(root->version);
+    CliDoc_destroy(root->author);
+    CliDoc_destroy(root->license);
+    CliDoc_destroy(root->description);
+    if (root->nflags)
+    {
+	for (size_t i = 0; i < root->nflags; ++i)
+	{
+	    CliDoc_destroy((CliDoc *)root->flags[i]);
+	}
+	free(root->flags);
+    }
+    if (root->nargs)
+    {
+	for (size_t i = 0; i < root->nargs; ++i)
+	{
+	    CliDoc_destroy((CliDoc *)root->args[i]);
+	}
+	free(root->args);
+    }
 }
 
 void CliDoc_destroy(CliDoc *self)
 {
+    if (!self) return;
+    switch (self->type)
+    {
+	case CT_ROOT: CDRoot_destroy(self); break;
+	case CT_ARG:
+	case CT_FLAG: CDArg_destroy(self); break;
+	case CT_LIST: CDList_destroy(self); break;
+	case CT_TEXT: CDText_destroy(self); break;
+	default: break;
+    }
     free(self);
 }
 
