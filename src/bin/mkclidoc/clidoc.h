@@ -4,6 +4,7 @@
 #include "decl.h"
 
 #include <stdio.h>
+#include <time.h>
 
 C_CLASS_DECL(CliDoc);
 
@@ -15,7 +16,8 @@ typedef enum ContentType
     CT_LIST,
     CT_DICT,
     CT_TABLE,
-    CT_TEXT
+    CT_TEXT,
+    CT_DATE
 } ContentType;
 
 CliDoc *CliDoc_create(FILE *doc);
@@ -29,6 +31,7 @@ const CliDoc *CDRoot_author(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_license(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_description(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_date(const CliDoc *self) CMETHOD ATTR_PURE;
+const CliDoc *CDRoot_www(const CliDoc *self) CMETHOD ATTR_PURE;
 size_t CDRoot_nflags(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_flag(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
 size_t CDRoot_nargs(const CliDoc *self) CMETHOD ATTR_PURE;
@@ -65,6 +68,8 @@ const char *CDTable_cell(const CliDoc *self, size_t x, size_t y)
     CMETHOD ATTR_PURE;
 
 const char *CDText_str(const CliDoc *self) CMETHOD ATTR_PURE;
+
+time_t CDDate_date(const CliDoc *self) CMETHOD ATTR_PURE;
 
 void CliDoc_destroy(CliDoc *self);
 

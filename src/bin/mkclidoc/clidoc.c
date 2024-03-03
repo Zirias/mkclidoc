@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 C_CLASS_DECL(CDRoot);
 C_CLASS_DECL(CDArg);
@@ -16,6 +17,7 @@ C_CLASS_DECL(CDList);
 C_CLASS_DECL(CDDict);
 C_CLASS_DECL(CDTable);
 C_CLASS_DECL(CDText);
+C_CLASS_DECL(CDDate);
 
 struct CliDoc
 {
@@ -33,6 +35,7 @@ struct CDRoot
     CliDoc *license;
     CliDoc *description;
     CliDoc *date;
+    CliDoc *www;
     CDFlag **flags;
     CDArg **args;
     size_t nflags;
@@ -87,6 +90,12 @@ struct CDText
 {
     CliDoc base;
     char *text;
+};
+
+struct CDDate
+{
+    CliDoc base;
+    time_t date;
 };
 
 typedef struct Parser
@@ -252,8 +261,8 @@ static int parsedict(Parser *p, CliDoc **val, CliDoc *parent)
 		size_t linelen = tmp - p->line;
 		txt = xrealloc(txt, txtlen + linelen + 2);
 		strncpy(txt + txtlen, p->line, linelen);
-		txt[txtlen + ++linelen] = ' ';
-		txt[txtlen + linelen] = 0;
+		txt[txtlen + linelen] = ' ';
+		txt[txtlen + ++linelen] = 0;
 		txtlen += linelen;
 		if (!nextline) err("Unexpected end of file");
 		skipws(p->line);
@@ -325,14 +334,17 @@ static int parseval(Parser *p, CliDoc **val, CliDoc *parent)
 		if (!nextline) err("Unexpected end of file");
 		skipws(p->line);
 	    }
-	    txt[txtlen-1] = 0;
-	    CDText *text = xmalloc(sizeof *text);
-	    text->base.parent = parent;
-	    text->base.type = CT_TEXT;
-	    text->text = txt;
-	    txt = 0;
-	    txtlen = 0;
-	    setoradd(val, (CliDoc *)text);
+	    if (txt)
+	    {
+		txt[txtlen-1] = 0;
+		CDText *text = xmalloc(sizeof *text);
+		text->base.parent = parent;
+		text->base.type = CT_TEXT;
+		text->text = txt;
+		txt = 0;
+		txtlen = 0;
+		setoradd(val, (CliDoc *)text);
+	    }
 	    if (havedict)
 	    {
 		if (parsedict(p, val, parent) < 0) goto error;
@@ -389,6 +401,40 @@ error:
     return -1;
 }
 
+static int parsedate(Parser *p, CliDoc **val, CliDoc *parent)
+{
+    struct tm tm = {0};
+    char buf[5] = {0};
+    char *tmp = strchr(p->line, '\n');
+    if (!tmp) err("Expected end of line");
+    skipwsb(tmp);
+    if (tmp == p->line) err ("Empty value");
+    if (tmp - p->line != 8) err ("Expected YYYYMMDD");
+
+    char *endp;
+    memcpy(buf, p->line + 6, 2);
+    tm.tm_mday = strtol(buf, &endp, 10);
+    if (endp != buf + 2) err("Expected YYYYMMDD");
+    memcpy(buf, p->line + 4, 2);
+    tm.tm_mon = strtol(buf, &endp, 10) - 1;
+    if (endp != buf + 2) err("Expected YYYYMMDD");
+    memcpy(buf, p->line, 4);
+    tm.tm_year = strtol(buf, &endp, 10) - 1900;
+    if (endp != buf + 4) err("Expected YYYYMMDD");
+    time_t dv = mktime(&tm);
+    if (dv == (time_t)(-1)) err("Expected YYYYMMDD");
+    p->line = 0;
+    CDDate *date = xmalloc(sizeof *date);
+    date->base.parent = parent;
+    date->base.type = CT_DATE;
+    date->date = dv;
+    *val = (CliDoc *)date;
+    return 0;
+
+error:
+    return -1;
+}
+
 static int parseargvals(Parser *p, CDArg *arg)
 {
     for (;;)
@@ -425,6 +471,7 @@ static int parseargvals(Parser *p, CDArg *arg)
 	else err("Unknown key");
 	if (val && *val) err("Duplicate key");
 	p->line = tmp+1;
+	skipws(p->line);
 	if (intval)
 	{
 	    if (parseint(p, intval) < 0) goto error;
@@ -546,20 +593,28 @@ static int parse(CDRoot *root, FILE *doc)
 	*tmp = 0;
 	int *intval = 0;
 	CliDoc **val = 0;
+	CliDoc **dateval = 0;
 	if (!strcmp(p->line, "name")) val = &root->name;
 	else if (!strcmp(p->line, "version")) val = &root->version;
 	else if (!strcmp(p->line, "comment")) val = &root->comment;
 	else if (!strcmp(p->line, "author")) val = &root->author;
 	else if (!strcmp(p->line, "license")) val = &root->license;
 	else if (!strcmp(p->line, "description")) val = &root->description;
-	else if (!strcmp(p->line, "date")) val = &root->date;
+	else if (!strcmp(p->line, "date")) dateval = &root->date;
+	else if (!strcmp(p->line, "www")) val = &root->www;
 	else if (!strcmp(p->line, "defgroup")) intval = &root->defgroup;
 	else err("Unknown key");
 	if (val && *val) err("Duplicate key");
+	if (dateval && *dateval) err("Duplicate key");
 	p->line = tmp+1;
+	skipws(p->line);
 	if (intval)
 	{
 	    if (parseint(p, intval) < 0) goto error;
+	}
+	else if (dateval)
+	{
+	    if (parsedate(p, dateval, (CliDoc *)root) < 0) goto error;
 	}
 	else if (parseval(p, val, (CliDoc *)root) < 0) goto error;
     }
@@ -633,6 +688,12 @@ const CliDoc *CDRoot_date(const CliDoc *self)
 {
     assert(self->type == CT_ROOT);
     return ((const CDRoot *)self)->date;
+}
+
+const CliDoc *CDRoot_www(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->www;
 }
 
 size_t CDRoot_nflags(const CliDoc *self)
@@ -768,6 +829,12 @@ const char *CDText_str(const CliDoc *self)
     return ((const CDText *)self)->text;
 }
 
+time_t CDDate_date(const CliDoc *self)
+{
+    assert(self->type == CT_DATE);
+    return ((const CDDate *)self)->date;
+}
+
 static void CDText_destroy(CliDoc *self)
 {
     CDText *text = (CDText *)self;
@@ -820,9 +887,12 @@ static void CDRoot_destroy(CliDoc *self)
     CDRoot *root = (CDRoot *)self;
     CliDoc_destroy(root->name);
     CliDoc_destroy(root->version);
+    CliDoc_destroy(root->comment);
     CliDoc_destroy(root->author);
     CliDoc_destroy(root->license);
     CliDoc_destroy(root->description);
+    CliDoc_destroy(root->date);
+    CliDoc_destroy(root->www);
     if (root->nflags)
     {
 	for (size_t i = 0; i < root->nflags; ++i)
@@ -853,6 +923,7 @@ void CliDoc_destroy(CliDoc *self)
 	case CT_DICT: CDDict_destroy(self); break;
 	case CT_TABLE: CDTable_destroy(self); break;
 	case CT_TEXT: CDText_destroy(self); break;
+	case CT_DATE:
 	default: break;
     }
     free(self);
