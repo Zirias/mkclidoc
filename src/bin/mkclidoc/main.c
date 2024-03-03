@@ -1,11 +1,11 @@
 #include "clidoc.h"
-#include "mdocwriter.h"
+#include "manwriter.h"
 
 int main(void)
 {
     CliDoc *doc = CliDoc_create(stdin);
     if (!doc) return 1;
-    writeMdoc(stdout, doc);
+    writeMan(stdout, doc);
     CliDoc_destroy(doc);
 }
 

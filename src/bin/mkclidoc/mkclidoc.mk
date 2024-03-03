@@ -1,5 +1,6 @@
 mkclidoc_MODULES:=	clidoc \
 			main \
+			manwriter \
 			mdocwriter \
 			util
 
