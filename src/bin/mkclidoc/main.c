@@ -1,4 +1,5 @@
 #include "clidoc.h"
+#include "cppwriter.h"
 #include "manwriter.h"
 
 #include <stdio.h>
@@ -11,6 +12,7 @@ static const struct {
     const char *name;
     writer writefunc;
 } writers[] = {
+    { "cpp", writeCpp },
     { "man", writeMan },
     { "mdoc", writeMdoc }
 };
@@ -101,7 +103,8 @@ done:
     return rc;
 
 usage:
-    fprintf(stderr, "Usage: %s [-f <man|mdoc>] [-o outfile] [infile]\n", name);
+    fprintf(stderr, "Usage: %s [-f <cpp|man|mdoc>] [-o outfile] [infile]\n",
+	    name);
     return EXIT_FAILURE;
 }
 
