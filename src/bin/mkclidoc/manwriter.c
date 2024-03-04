@@ -16,8 +16,9 @@ typedef struct Ctx
     const char *arg;
     size_t nflags;
     size_t nargs;
+    int mdoc;
 } Ctx;
-#define Ctx_init() {0, 0, 0, 0}
+#define Ctx_init(mdoc) {0, 0, 0, 0, (mdoc)}
 
 #define err(m) do { \
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
@@ -88,12 +89,22 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	else if (endp == nmpos)
 	{
 	    if (!nl) fputc('\n', out);
-	    fprintf(out, "\\fB%s\\fR", ctx->name);
+	    if (ctx->mdoc) fputs(".Nm", out);
+	    else fprintf(out, "\\fB%s\\fR", ctx->name);
 	    str += 8;
 	    if (*str)
 	    {
 		if (*str != ' ')
 		{
+		    if (ctx->mdoc)
+		    {
+			if (*str != '.' && *str != ','
+				&& *str != ':' && *str != ';')
+			{
+			    fputs(" Ns No ", out);
+			}
+			else fputc(' ', out);
+		    }
 		    while (*str && *str != ' ')
 		    {
 			mputc(out, *str++);
@@ -109,12 +120,21 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	else if (endp == argpos)
 	{
 	    if (!nl) fputc('\n', out);
-	    fprintf(out, "\\fI%s\\fR", ctx->arg);
+	    fprintf(out, ctx->mdoc ? ".Ar %s" : "\\fI%s\\fR", ctx->arg);
 	    str += 7;
 	    if (*str)
 	    {
 		if (*str != ' ')
 		{
+		    if (ctx->mdoc)
+		    {
+			if (*str != '.' && *str != ','
+				&& *str != ':' && *str != ';')
+			{
+			    fputs(" Ns No ", out);
+			}
+			else fputc(' ', out);
+		    }
 		    while (*str && *str != ' ')
 		    {
 			mputc(out, *str++);
@@ -132,22 +152,28 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 
 static int writeManSynopsis(FILE *out, Ctx *ctx, const CliDoc *root)
 {
-    fputs("\n.SH \"SYNOPSIS\"\n.PD 0", out);
+    if (ctx->mdoc) fputs("\n.Sh SYNOPSIS", out);
+    else fputs("\n.SH \"SYNOPSIS\"\n.PD 0", out);
 
     ctx->nflags = CDRoot_nflags(root);
     ctx->nargs = CDRoot_nargs(root);
 
     if (ctx->nflags + ctx->nargs == 0)
     {
-	fprintf(out, "\n.HP 9n\n\\fB%s\\fR", ctx->name);
+	if (ctx->mdoc) fputs("\n.Nm", out);
+	else fprintf(out, "\n.HP 9n\n\\fB%s\\fR", ctx->name);
     }
     else
     {
 	int defgroup = CDRoot_defgroup(root);
 	for (int i = 0, n = 0; i <= defgroup || n; ++i, n = 0)
 	{
-	    if (i) fputs("\n.br", out);
-	    fprintf(out, "\n.HP 9n\n\\fB%s\\fR", ctx->name);
+	    if (ctx->mdoc) fputs("\n.Nm", out);
+	    else
+	    {
+		if (i) fputs("\n.br", out);
+		fprintf(out, "\n.HP 9n\n\\fB%s\\fR", ctx->name);
+	    }
 	    char noarg[128] = {0};
 	    char rnoarg[128] = {0};
 	    int nalen = 0;
@@ -173,12 +199,14 @@ static int writeManSynopsis(FILE *out, Ctx *ctx, const CliDoc *root)
 	    }
 	    if (rnalen)
 	    {
-		fprintf(out, "\n\\fB\\-%s\\fR", rnoarg);
+		fprintf(out, ctx->mdoc ? "\n.Fl %s"
+			: "\n\\fB\\-%s\\fR", rnoarg);
 		++n;
 	    }
 	    if (nalen)
 	    {
-		fprintf(out, "\n[\\fB\\-%s\\fR]", noarg);
+		fprintf(out, ctx->mdoc ? "\n.Op Fl %s"
+			: "\n[\\fB\\-%s\\fR]", noarg);
 		++n;
 	    }
 	    for (size_t j = 0; j < ctx->nflags; ++j)
@@ -193,12 +221,14 @@ static int writeManSynopsis(FILE *out, Ctx *ctx, const CliDoc *root)
 		int optional = CDFlag_optional(flag);
 		if (optional == 0)
 		{
-		    fprintf(out, "\n\\fB\\-%c\\fR\\ \\fI%s\\fR",
+		    fprintf(out, ctx->mdoc ? "\n.Fl %c Ar %s"
+			    : "\n\\fB\\-%c\\fR\\ \\fI%s\\fR",
 			    CDFlag_flag(flag), arg);
 		}
 		else
 		{
-		    fprintf(out, "\n[\\fB\\-%c\\fR\\ \\fI%s\\fR]",
+		    fprintf(out, ctx->mdoc ? "\n.Op Fl %c Ar %s"
+			    : "\n[\\fB\\-%c\\fR\\ \\fI%s\\fR]",
 			    CDFlag_flag(flag), arg);
 		}
 		++n;
@@ -213,17 +243,19 @@ static int writeManSynopsis(FILE *out, Ctx *ctx, const CliDoc *root)
 		int optional = CDArg_optional(arg);
 		if (optional == 1)
 		{
-		    fprintf(out, "\n[\\fI%s\\fR]", CDArg_arg(arg));
+		    fprintf(out, ctx->mdoc ? "\n.Op Ar %s"
+			    : "\n[\\fI%s\\fR]", CDArg_arg(arg));
 		}
 		else
 		{
-		    fprintf(out, "\n\\fI%s\\fR", CDArg_arg(arg));
+		    fprintf(out, ctx->mdoc ? "\n.Ar %s"
+			    : "\n\\fI%s\\fR", CDArg_arg(arg));
 		}
 		++n;
 	    }
 	}
     }
-    fputs("\n.PD", out);
+    if (!ctx->mdoc) fputs("\n.PD", out);
     return 0;
 
 error:
@@ -255,21 +287,27 @@ static void writeManCell(FILE *out, Ctx *ctx, const char *cell)
 	case '%':
 	    if (!strcmp(cell, "%%name%%"))
 	    {
-		fprintf(out, "\\fB%s\\fR", ctx->name);
+		fprintf(out, ctx->mdoc ? "\" Ns Nm %s \"" : "\\fB%s\\fR",
+			ctx->name);
 		cell += 8;
 		continue;
 	    }
 	    if (!strcmp(cell, "%%arg%%"))
 	    {
-		fprintf(out, "\\fI%s\\fR", ctx->arg);
+		fprintf(out, ctx->mdoc ? "\" Ns Ar %s \"" : "\\fI%s\\fR",
+			ctx->arg);
 		cell += 7;
 		continue;
 	    }
+	    ATTR_FALLTHROUGH;
+	case '"':
+	    if (!ctx->mdoc) goto writechr;
 	    ATTR_FALLTHROUGH;
 	case '\\':
 	    fputc('\\', out);
 	    ATTR_FALLTHROUGH;
 	default:
+	writechr:
 	    fputc(*cell++, out);
     }
 }
@@ -278,36 +316,72 @@ static void writeManTable(FILE *out, Ctx *ctx, const CliDoc *table)
 {
     size_t width = CDTable_width(table);
     size_t height = CDTable_height(table);
-    fputs("\n.TS\n", out);
-    for (size_t x = 0; x < width; ++x)
+    if (ctx->mdoc)
     {
-	fputc(x ? ' ' : '\n', out);
-	fputc('l', out);
+	struct {
+	    size_t len;
+	    const char *str;
+	} *wspec = 0;
+	wspec = xmalloc(width * sizeof *wspec);
+	memset(wspec, 0, sizeof *wspec);
+	for (size_t y = 0; y < height; ++y)
+	{
+	    for (size_t x = 0; x < width; ++x)
+	    {
+		const char *c = CDTable_cell(table, x, y);
+		size_t len = strlen(c);
+		if (len > wspec[x].len)
+		{
+		    wspec[x].len = len;
+		    wspec[x].str = c;
+		}
+	    }
+	}
+	fputs("\n.Bl -column -compact", out);
+	for (size_t x = 0; x < width; ++x)
+	{
+	    fprintf(out, " \"%s\"", wspec[x].str ? wspec[x].str : "");
+	}
+	free(wspec);
     }
-    fputc('.', out);
+    else
+    {
+	fputs("\n.TS", out);
+	for (size_t x = 0; x < width; ++x)
+	{
+	    fputc(x ? ' ' : '\n', out);
+	    fputc('l', out);
+	}
+	fputc('.', out);
+    }
     for (size_t y = 0; y < height; ++y)
     {
 	for (size_t x = 0; x < width; ++x)
 	{
-	    fputc(x ? '\t' : '\n', out);
+	    if (ctx->mdoc) fputs(x ? " Ta \"" : "\n.It \"", out);
+	    else fputc(x ? '\t' : '\n', out);
 	    writeManCell(out, ctx, CDTable_cell(table, x, y));
+	    if (ctx->mdoc) fputc('"', out);
 	}
     }
-    fputs("\n.TE", out);
+    if (ctx->mdoc) fputs("\n.El", out);
+    else fputs("\n.TE", out);
 }
 
 static int writeManDict(FILE *out, Ctx *ctx, const CliDoc *dict)
 {
-    fputs("\n.PD 0\n.RS 8n", out);
+    if (ctx->mdoc) fputs("\n.Bl -tag -width Ds -compact", out);
+    else fputs("\n.PD 0\n.RS 8n", out);
     size_t len = CDDict_length(dict);
     for (size_t i = 0; i < len; ++i)
     {
 	const char *key = CDDict_key(dict, i);
 	const CliDoc *val = CDDict_val(dict, i);
-	fprintf(out, "\n.TP 8n\n%s", key);
+	fprintf(out, ctx->mdoc ? "\n.It %s" : "\n.TP 8n\n%s", key);
 	if (writeManDescription(out, ctx, val, 0) < 0) return -1;
     }
-    fputs("\n.PD\n.PP\n.RE", out);
+    if (ctx->mdoc) fputs("\n.El", out);
+    else fputs("\n.PD\n.PP\n.RE", out);
     return 0;
 }
 
@@ -355,32 +429,37 @@ static int writeManArgDesc(FILE *out, Ctx *ctx, const CliDoc *arg)
     const CliDoc *def = CDArg_default(arg);
     if (min || max || def)
     {
-	fputs("\n.sp\n.PD 0\n.RS 8n", out);
+	if (ctx->mdoc) fputs("\n.sp\n.Bl -tag -width default: -compact", out);
+	else fputs("\n.sp\n.PD 0\n.RS 8n", out);
 	if (min)
 	{
-	    fputs("\n.TP 10n\nmin:", out);
+	    if (ctx->mdoc) fputs("\n.It min:", out);
+	    else fputs("\n.TP 10n\nmin:", out);
 	    if (writeManDescription(out, ctx, min, 0) < 0) return -1;
 	}
 	if (max)
 	{
-	    fputs("\n.TP 10n\nmax:", out);
+	    if (ctx->mdoc) fputs("\n.It max:", out);
+	    else fputs("\n.TP 10n\nmax:", out);
 	    if (writeManDescription(out, ctx, max, 0) < 0) return -1;
 	}
 	if (def)
 	{
-	    fputs("\n.TP 10n\ndefault:", out);
+	    if (ctx->mdoc) fputs("\n.It default:", out);
+	    else fputs("\n.TP 10n\ndefault:", out);
 	    if (writeManDescription(out, ctx, def, 0) < 0) return -1;
 	}
-	fputs("\n.PD\n.PP\n.RE", out);
+	if (ctx->mdoc) fputs("\n.El", out);
+	else fputs("\n.PD\n.PP\n.RE", out);
     }
     return 0;
 }
 
-int writeMan(FILE *out, const CliDoc *root)
+static int write(FILE *out, const CliDoc *root, int mdoc)
 {
     assert(CliDoc_type(root) == CT_ROOT);
     
-    Ctx ctx = Ctx_init();
+    Ctx ctx = Ctx_init(mdoc);
 
     const CliDoc *date = CDRoot_date(root);
     if (!date || CliDoc_type(date) != CT_DATE) err("missing date");
@@ -393,78 +472,103 @@ int writeMan(FILE *out, const CliDoc *root)
 
     time_t dv = CDDate_date(date);
     struct tm *tm = localtime(&dv);
-    strftime(strbuf, sizeof strbuf, "%B %e, %Y", tm);
-    fprintf(out, ".TH \"%s\" \"1\" \"%s\" \"%s", strToUpper(ctx.name),
-	    strbuf, ctx.name);
-    if (istext(version)) fprintf(out, " %s", CDText_str(version));
-    fputs("\"\n.nh\n.if n .ad l\n.SH \"NAME\"", out);
-    fprintf(out, "\n\\fB%s\\fR\n\\- %s", ctx.name, CDText_str(comment));
+    if (mdoc)
+    {
+	strftime(strbuf, sizeof strbuf, "%B %e, %Y", tm);
+	fprintf(out, ".Dd %s", strbuf);
+	fprintf(out, "\n.Dt %s 1\n.Os %s", strToUpper(ctx.name), ctx.name);
+	if (istext(version)) fprintf(out, " %s", CDText_str(version));
+	fprintf(out, "\n.Sh NAME\n.Nm %s\n.Nd %s",
+		ctx.name, CDText_str(comment));
+    }
+    else
+    {
+	fprintf(out, ".TH \"%s\" \"1\" ", strToUpper(ctx.name));
+	strftime(strbuf, sizeof strbuf, "%B %e, %Y", tm);
+	fprintf(out, "\"%s\" \"%s", strbuf, ctx.name);
+	if (istext(version)) fprintf(out, " %s", CDText_str(version));
+	fputs("\"\n.nh\n.if n .ad l\n.SH \"NAME\"", out);
+	fprintf(out, "\n\\fB%s\\fR\n\\- %s", ctx.name, CDText_str(comment));
+    }
 
     if (writeManSynopsis(out, &ctx, root) < 0) goto error;
 
-    fputs("\n.SH \"DESCRIPTION\"", out);
+    if (mdoc) fputs("\n.Sh DESCRIPTION", out);
+    else fputs("\n.SH \"DESCRIPTION\"", out);
     if (writeManDescription(out, &ctx,
 		CDRoot_description(root), 0) < 0) goto error;
 
     if (ctx.nflags + ctx.nargs > 0)
     {
 	fputs("\n.sp\nThe options are as follows:", out);
+	if (mdoc) fputs("\n.Bl -tag -width Ds", out);
 	for (size_t i = 0; i < ctx.nflags; ++i)
 	{
-	    fputs("\n.TP 8n", out);
+	    if (!mdoc) fputs("\n.TP 8n", out);
 	    const CliDoc *flag = CDRoot_flag(root, i);
 	    const char *arg = CDFlag_arg(flag);
 	    if (arg)
 	    {
 		ctx.arg = arg;
-		fprintf(out, "\n\\fB\\-%c\\fR \\fI%s\\fR",
+		fprintf(out, mdoc ? "\n.It Fl %c Ar %s"
+			: "\n\\fB\\-%c\\fR \\fI%s\\fR",
 			CDFlag_flag(flag), arg);
 	    }
 	    else
 	    {
 		ctx.arg = 0;
-		fprintf(out, "\n\\fB\\-%c\\fR", CDFlag_flag(flag));
+		fprintf(out, mdoc ? "\n.It Fl %c" : "\n\\fB\\-%c\\fR",
+			CDFlag_flag(flag));
 	    }
 	    if (writeManArgDesc(out, &ctx, flag) < 0) goto error;
 	}
 	for (size_t i = 0; i < ctx.nargs; ++i)
 	{
-	    fputs("\n.TP 8n", out);
+	    if (!mdoc) fputs("\n.TP 8n", out);
 	    const CliDoc *arg = CDRoot_arg(root, i);
 	    ctx.arg = CDArg_arg(arg);
-	    fprintf(out, "\n\\fI%s\\fR", ctx.arg);
+	    fprintf(out, mdoc ? "\n.It .Ar %s" : "\n\\fI%s\\fR", ctx.arg);
 	    if (writeManArgDesc(out, &ctx, arg) < 0) goto error;
 	}
+	if (mdoc) fputs("\n.El", out);
     }
 
     const CliDoc *license = CDRoot_license(root);
     const CliDoc *www = CDRoot_www(root);
     if (istext(version) || istext(license) || istext(www))
     {
-	fputs("\n.SS \"Additional information\"\n.PD 0", out);
+	if (mdoc) fputs("\n.Ss Additional information\n"
+		".Bl -tag -width Version: -compact", out);
+	else fputs("\n.SS \"Additional information\"\n.PD 0", out);
 	if (istext(version))
 	{
-	    fprintf(out, "\n.TP 10n\nVersion:\n\\fB%s\\fR\n%s",
+	    if (mdoc) fprintf(out, "\n.It Version:\n.Nm\n%s",
+		    CDText_str(version));
+	    else fprintf(out, "\n.TP 10n\nVersion:\n\\fB%s\\fR\n%s",
 		    ctx.name, CDText_str(version));
 	}
 	if (istext(license))
 	{
-	    fputs("\n.TP 10n\nLicense:\n", out);
+	    if (mdoc) fputs("\n.It License:\n", out);
+	    else fputs("\n.TP 10n\nLicense:\n", out);
 	    mputs(out, CDText_str(license));
 	}
 	if (istext(www))
 	{
-	    fputs("\n.TP 10n\nWWW:\n\\fB", out);
+	    if (mdoc) fputs("\n.It WWW:\n.Lk", out);
+	    else fputs("\n.TP 10n\nWWW:\n\\fB", out);
 	    mputs(out, CDText_str(www));
-	    fputs("\\fR", out);
+	    if (!mdoc) fputs("\\fR", out);
 	}
-	fputs("\n.PD\n.PP", out);
+	if (mdoc) fputs("\n.El", out);
+	else fputs("\n.PD\n.PP", out);
     }
 
     const CliDoc *author = CDRoot_author(root);
     if (istext(author))
     {
-	fputs("\n.SH \"AUTHORS\"\n", out);
+	if (mdoc) fputs("\n.Sh AUTHORS\n.An ", out);
+	else fputs("\n.SH \"AUTHORS\"\n", out);
 	const char *astr = CDText_str(author);
 	const char *es = strchr(astr, '<');
 	const char *ea = strchr(astr, '@');
@@ -472,9 +576,10 @@ int writeMan(FILE *out, const CliDoc *root)
 	if (es && ea && ee && es < ea && ea < ee)
 	{
 	    mnputs(out, astr, es-astr);
-	    fputs("<\\fI", out);
+	    if (mdoc) fputs(" Aq Mt ", out);
+	    else fputs("<\\fI", out);
 	    mnputs(out, es+1, ee-es-1);
-	    fputs("\\fR>", out);
+	    if (!mdoc) fputs("\\fR>", out);
 	}
 	else fputs(astr, out);
     }
@@ -485,3 +590,14 @@ int writeMan(FILE *out, const CliDoc *root)
 error:
     return -1;
 }
+
+int writeMan(FILE *out, const CliDoc *root)
+{
+    return write(out, root, 0);
+}
+
+int writeMdoc(FILE *out, const CliDoc *root)
+{
+    return write(out, root, 1);
+}
+

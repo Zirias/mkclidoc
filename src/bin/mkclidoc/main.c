@@ -1,6 +1,5 @@
 #include "clidoc.h"
 #include "manwriter.h"
-#include "mdocwriter.h"
 
 #include <stdio.h>
 #include <stdlib.h>

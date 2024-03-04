@@ -9,5 +9,7 @@ C_CLASS_DECL(CliDoc);
 
 int writeMan(FILE *out, const CliDoc *root)
     ATTR_NONNULL((1)) ATTR_NONNULL((2));
+int writeMdoc(FILE *out, const CliDoc *root)
+    ATTR_NONNULL((1)) ATTR_NONNULL((2));
 
 #endif
