@@ -474,7 +474,9 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
     struct tm *tm = localtime(&dv);
     if (mdoc)
     {
-	strftime(strbuf, sizeof strbuf, "%B %e, %Y", tm);
+	size_t mlen = strftime(strbuf, sizeof strbuf, "%B", tm);
+	snprintf(strbuf + mlen, sizeof strbuf - mlen,
+		" %d, %d", tm->tm_mday, tm->tm_year + 1900);
 	fprintf(out, ".Dd %s", strbuf);
 	fprintf(out, "\n.Dt %s 1\n.Os %s", strToUpper(ctx.name), ctx.name);
 	if (istext(version)) fprintf(out, " %s", CDText_str(version));
@@ -484,7 +486,9 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
     else
     {
 	fprintf(out, ".TH \"%s\" \"1\" ", strToUpper(ctx.name));
-	strftime(strbuf, sizeof strbuf, "%B %e, %Y", tm);
+	size_t mlen = strftime(strbuf, sizeof strbuf, "%B", tm);
+	snprintf(strbuf + mlen, sizeof strbuf - mlen,
+		" %d, %d", tm->tm_mday, tm->tm_year + 1900);
 	fprintf(out, "\"%s\" \"%s", strbuf, ctx.name);
 	if (istext(version)) fprintf(out, " %s", CDText_str(version));
 	fputs("\"\n.nh\n.if n .ad l\n.SH \"NAME\"", out);
