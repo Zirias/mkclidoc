@@ -559,7 +559,7 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	}
 	if (istext(www))
 	{
-	    if (mdoc) fputs("\n.It WWW:\n.Lk", out);
+	    if (mdoc) fputs("\n.It WWW:\n.Lk ", out);
 	    else fputs("\n.TP 10n\nWWW:\n\\fB", out);
 	    mputs(out, CDText_str(www));
 	    if (!mdoc) fputs("\\fR", out);
