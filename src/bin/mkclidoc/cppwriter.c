@@ -65,9 +65,9 @@ static void writeCppStrLine(FILE *out, const Ctx *ctx,
 	    ++len;
 	}
 	size_t wlen = strcspn(*str, " \t");
-	size_t olen;
-	size_t rlen;
-	size_t plen;
+	size_t olen = 0;
+	size_t rlen = 0;
+	size_t plen = 0;
 	const char *repl = 0;
 	const char *token = 0;
 	if (wlen >= 8 && (token = findstrpos(*str, "%%name%%", wlen)))
