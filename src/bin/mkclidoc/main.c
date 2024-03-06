@@ -1,6 +1,6 @@
 #include "clidoc.h"
-#include "cppwriter.h"
 #include "manwriter.h"
+#include "srcwriter.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +14,8 @@ static const struct {
 } writers[] = {
     { "cpp", writeCpp },
     { "man", writeMan },
-    { "mdoc", writeMdoc }
+    { "mdoc", writeMdoc },
+    { "sh", writeSh }
 };
 
 static writer currentWriter = writeMan;
@@ -110,7 +111,7 @@ done:
     return rc;
 
 usage:
-    fprintf(stderr, "Usage: %s [-f <cpp|man|mdoc>[,args]]"
+    fprintf(stderr, "Usage: %s [-f <cpp|man|mdoc|sh>[,args]]"
 	    "[-o outfile] [infile]\n", name);
     return EXIT_FAILURE;
 }

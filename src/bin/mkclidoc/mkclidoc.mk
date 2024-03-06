@@ -1,7 +1,7 @@
 mkclidoc_MODULES:=	clidoc \
-			cppwriter \
 			main \
 			manwriter \
+			srcwriter \
 			util
 
 $(call binrules,mkclidoc)

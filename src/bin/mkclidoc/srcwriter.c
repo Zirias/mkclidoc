@@ -1,4 +1,4 @@
-#include "cppwriter.h"
+#include "srcwriter.h"
 
 #include "clidoc.h"
 #include "util.h"
@@ -13,12 +13,14 @@ typedef struct Ctx
 {
     const char *name;
     const char *arg;
+    int cpp;
     int first;
 } Ctx;
 
-static void cpputc(FILE *out, int c)
+static void srcputc(FILE *out, const Ctx *ctx, int c)
 {
     if (c == '\\' || c == '"') fputc('\\', out);
+    if (!ctx->cpp && c == '$') fputc('\\', out);
     fputc(c, out);
 }
 
@@ -40,7 +42,7 @@ static const char *findstrpos(const char *str, const char *pat, size_t len)
     return 0;
 }
 
-static void writeCppStrLine(FILE *out, const Ctx *ctx,
+static void writeSrcStrLine(FILE *out, const Ctx *ctx,
 	const char **str, int indent)
 {
     int len = 0;
@@ -52,7 +54,8 @@ static void writeCppStrLine(FILE *out, const Ctx *ctx,
     }
     else
     {
-	fputs("\\n\" \\\n\"", out);
+	if (ctx->cpp) fputs("\\n\" \\\n\"", out);
+	else fputc('\n', out);
 	if (indent) fprintf(out, "%*s", indent, "");
     }
     while (**str)
@@ -93,11 +96,11 @@ static void writeCppStrLine(FILE *out, const Ctx *ctx,
 	    while (*wsp) fputc(*wsp++, out);
 	    if (repl)
 	    {
-		for (size_t i = 0; i < plen; ++i) cpputc(out, (*str)[i]);
+		for (size_t i = 0; i < plen; ++i) srcputc(out, ctx, (*str)[i]);
 		*str += rlen + plen;
-		while (*repl) cpputc(out, *repl++);
+		while (*repl) srcputc(out, ctx, *repl++);
 	    }
-	    for (size_t i = 0; i < wlen; ++i) cpputc(out, (*str)[i]);
+	    for (size_t i = 0; i < wlen; ++i) srcputc(out, ctx, (*str)[i]);
 	    *str += wlen;
 	    len += olen;
 	}
@@ -105,13 +108,15 @@ static void writeCppStrLine(FILE *out, const Ctx *ctx,
     }
 }
 
-static int writeUsageFlag(FILE *out, int pos, const char *flag, int optional)
+static int writeUsageFlag(FILE *out, const Ctx *ctx, int pos,
+	const char *flag, int optional)
 {
     size_t len = strlen(flag);
     if (optional) len += 2;
     if (pos > 12 && pos + len >= 78)
     {
-	fputs("\\n\" \\\n\"            ", out);
+	if (ctx->cpp) fputs("\\n\" \\\n\"            ", out);
+	else fputs("\n            ", out);
 	pos = 12;
     }
     else
@@ -120,13 +125,13 @@ static int writeUsageFlag(FILE *out, int pos, const char *flag, int optional)
 	fputc(' ', out);
     }
     if (optional) fputc('[', out);
-    while (*flag) cpputc(out, *flag++);
+    while (*flag) srcputc(out, ctx, *flag++);
     if (optional) fputc(']', out);
     return pos + len;
 }
 
 #define err(m) do { \
-    fprintf(stderr, "Cannot write cpp: %s\n", (m)); goto error; } while (0)
+    fprintf(stderr, "Cannot write src: %s\n", (m)); goto error; } while (0)
 #define istext(m) ((m) && CliDoc_type(m) == CT_TEXT)
 
 static void writeDescription(FILE *out, Ctx *ctx,
@@ -154,8 +159,8 @@ static void writeDict(FILE *out, Ctx *ctx,
     }
     for (size_t i = 0; i < len; ++i)
     {
-	fprintf(out, "\\n\" \\\n\"%*s%-*s", indent, "", subindent,
-		CDDict_key(dict, i));
+	fprintf(out, ctx->cpp ? "\\n\" \\\n\"%*s%-*s" : "\n%*s%-*s",
+		indent, "", subindent, CDDict_key(dict, i));
 	ctx->first = 1;
 	writeDescription(out, ctx, CDDict_val(dict, i), indent + subindent);
     }
@@ -183,7 +188,8 @@ static void writeTable(FILE *out, Ctx *ctx,
     }
     for (size_t y = 0; y < height; ++y)
     {
-	if (!ctx->first) fprintf(out, "\\n\" \\\n\"%*s", indent, "");
+	if (!ctx->first) fprintf(out, ctx->cpp ? "\\n\" \\\n\"%*s" : "\n%*s",
+		indent, "");
 	ctx->first = 0;
 	pos = 0;
 	for (size_t x = 0; x < width; ++x)
@@ -196,7 +202,7 @@ static void writeTable(FILE *out, Ctx *ctx,
 		    const char *repl = ctx->name;
 		    while (*repl)
 		    {
-			cpputc(out, *repl++);
+			srcputc(out, ctx, *repl++);
 			++pos;
 		    }
 		    cell += 8;
@@ -206,14 +212,14 @@ static void writeTable(FILE *out, Ctx *ctx,
 		    const char *repl = ctx->arg;
 		    while (*repl)
 		    {
-			cpputc(out, *repl++);
+			srcputc(out, ctx, *repl++);
 			++pos;
 		    }
 		    cell += 8;
 		}
 		else
 		{
-		    cpputc(out, *cell++);
+		    srcputc(out, ctx, *cell++);
 		    ++pos;
 		}
 	    }
@@ -236,7 +242,7 @@ static void writeDescription(FILE *out, Ctx *ctx,
 	    str = CDText_str(desc);
 	    while (*str)
 	    {
-		writeCppStrLine(out, ctx, &str, (ctx->first?-1:1) * indent);
+		writeSrcStrLine(out, ctx, &str, (ctx->first?-1:1) * indent);
 		ctx->first = 0;
 	    }
 	    break;
@@ -310,38 +316,43 @@ static void writeArgDesc(FILE *out, Ctx *ctx,
 	const char *str = mmd;
 	while (*str)
 	{
-	    writeCppStrLine(out, ctx, &str, (ctx->first?-1:1) * indent);
+	    writeSrcStrLine(out, ctx, &str, (ctx->first?-1:1) * indent);
 	    ctx->first = 0;
 	}
 	free(mmd);
     }
 }
 
-int writeCpp(FILE *out, const CliDoc *root, const char *args)
+static int write(FILE *out, const CliDoc *root, int cpp)
 {
     assert(CliDoc_type(root) == CT_ROOT);
-    if (args)
-    {
-	fputs("The cpp format does not support any arguments.\n", stderr);
-	return -1;
-    }
 
     const CliDoc *name = CDRoot_name(root);
     if (!istext(name)) err("missing name");
     const char *namestr = CDText_str(name);
+    Ctx ctx = { namestr, 0, cpp, 0};
     char ucname[64];
+    int usagewidth;
     int i;
-    for (i = 0; i < 63 && namestr[i]; ++i)
+    if (cpp)
     {
-	ucname[i] = toupper(namestr[i]);
-    }
-    ucname[i] = 0;
-    int usagewidth = i;
-    if (usagewidth < 32) usagewidth = 32;
+	for (i = 0; i < 63 && namestr[i]; ++i)
+	{
+	    ucname[i] = toupper(namestr[i]);
+	}
+	ucname[i] = 0;
+	usagewidth = i;
 
-    fprintf(out, "#ifndef %s_HELP\n\n#undef %s_USAGE_FMT\n"
-	    "#undef %s_USAGE_ARGS\n\n#define %s_USAGE_FMT \\\n\"Usage: %%s",
-	    ucname, ucname, ucname, ucname);
+	fprintf(out, "#ifndef %s_HELP\n\n#undef %s_USAGE_FMT\n"
+		"#undef %s_USAGE_ARGS\n\n#define %s_USAGE_FMT \\\n\"Usage: %%s",
+		ucname, ucname, ucname, ucname);
+    }
+    else
+    {
+	usagewidth = strlen(namestr);
+	fputs("usage() {\n  echo \"\\\nUsage: $1", out);
+    }
+    if (usagewidth < 32) usagewidth = 32;
 
     int nflags = CDRoot_nflags(root);
     int nargs = CDRoot_nargs(root);
@@ -378,17 +389,17 @@ int writeCpp(FILE *out, const CliDoc *root, const char *args)
 		}
 	    }
 	    int pos = usagewidth;
-	    if (i) fputs ("\\n\" \\\n\"       %s", out);
+	    if (i) fputs (cpp ? "\\n\" \\\n\"       %s" : "\n       $1" , out);
 	    if (rnalen)
 	    {
 		sprintf(flagstr, "-%s", rnoarg);
-		pos = writeUsageFlag(out, pos, flagstr, 0);
+		pos = writeUsageFlag(out, &ctx, pos, flagstr, 0);
 		++n;
 	    }
 	    if (nalen)
 	    {
 		sprintf(flagstr, "-%s", noarg);
-		pos = writeUsageFlag(out, pos, flagstr, 1);
+		pos = writeUsageFlag(out, &ctx, pos, flagstr, 1);
 		++n;
 	    }
 	    for (int j = 0; j < nflags; ++j)
@@ -405,7 +416,7 @@ int writeCpp(FILE *out, const CliDoc *root, const char *args)
 		if (arglen + 3 > (size_t)indent) indent = arglen + 3;
 		int optional = CDFlag_optional(flag);
 		sprintf(flagstr, "-%c %s", CDFlag_flag(flag), arg);
-		pos = writeUsageFlag(out, pos, flagstr, optional);
+		pos = writeUsageFlag(out, &ctx, pos, flagstr, optional);
 	    }
 	    for (int j = 0; j < nargs; ++j)
 	    {
@@ -419,32 +430,35 @@ int writeCpp(FILE *out, const CliDoc *root, const char *args)
 		if (arglen > 80) err("argument too long");
 		if (arglen > (size_t)indent) indent = arglen;
 		int optional = CDArg_optional(arg);
-		pos = writeUsageFlag(out, pos, argstr, optional);
+		pos = writeUsageFlag(out, &ctx, pos, argstr, optional);
 	    }
 	}
     }
 
-    fprintf(out, "\\n\"\n\n#define %s_USAGE_ARGS(argv0)", ucname);
-    for (int j = 0; j < i; ++j)
+    if (cpp)
     {
-	fputc(j ? ',' : ' ', out);
-	fputs("(argv0)", out);
+	fprintf(out, "\\n\"\n\n#define %s_USAGE_ARGS(argv0)", ucname);
+	for (int j = 0; j < i; ++j)
+	{
+	    fputc(j ? ',' : ' ', out);
+	    fputs("(argv0)", out);
+	}
+	fprintf(out, "\n\n#define %s_HELP", ucname);
     }
-
-    fprintf(out, "\n\n#define %s_HELP", ucname);
+    else fputs ("\"\n}\n\nhelp() {\n  usage \"$1\"\n  echo \"", out);
 
     if (nflags + nargs > 0)
     {
-	Ctx ctx = { namestr, 0, 0 };
 	indent += 2;
-	fputs(" \"", out);
+	if (cpp) fputs(" \"", out);
 	for (i = 0; i < nflags; ++i)
 	{
 	    const CliDoc *flag = CDRoot_flag(root, i);
 	    const char *arg = CDFlag_arg(flag);
 	    if (arg) sprintf(flagstr, "-%c %s", CDFlag_flag(flag), arg);
 	    else sprintf(flagstr, "-%c", CDFlag_flag(flag));
-	    fprintf(out, "\\n\" \\\n\"    %-*s", indent, flagstr);
+	    fprintf(out, cpp ? "\\n\" \\\n\"    %-*s" : "\n    %-*s",
+		    indent, flagstr);
 	    ctx.arg = arg;
 	    ctx.first = 1;
 	    writeArgDesc(out, &ctx, flag, indent + 4);
@@ -452,18 +466,39 @@ int writeCpp(FILE *out, const CliDoc *root, const char *args)
 	for (i = 0; i < nargs; ++i)
 	{
 	    const CliDoc *arg = CDRoot_arg(root, i);
-	    fprintf(out, "\\n\" \\\n\"    %-*s", indent, CDArg_arg(arg));
+	    fprintf(out, cpp ? "\\n\" \\\n\"    %-*s" : "\n    %-*s",
+		    indent, CDArg_arg(arg));
 	    ctx.arg = CDArg_arg(arg);
 	    ctx.first = 1;
 	    writeArgDesc(out, &ctx, arg, indent + 4);
 	}
-	fputs("\\n\"", out);
+	if (cpp) fputs("\\n\"", out);
     }
 
-    fputs("\n\n#endif\n", out);
+    if (cpp) fputs("\n\n#endif\n", out);
+    else fputs("\"\n}\n", out);
     return 0;
 
 error:
     return -1;
 }
 
+int writeCpp(FILE *out, const CliDoc *root, const char *args)
+{
+    if (args)
+    {
+	fputs("The cpp format does not support any arguments.\n", stderr);
+	return -1;
+    }
+    return write(out, root, 1);
+}
+
+int writeSh(FILE *out, const CliDoc *root, const char *args)
+{
+    if (args)
+    {
+	fputs("The sh format does not support any arguments.\n", stderr);
+	return -1;
+    }
+    return write(out, root, 0);
+}
