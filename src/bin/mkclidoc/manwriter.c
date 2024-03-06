@@ -73,14 +73,21 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    mputs(out, str);
 	    break;
 	}
+	const char *wsp = endp;
 	if (endp != str)
 	{
-	    mnputs(out, str, endp-str);
-	    nl = 0;
+	    while (wsp > str && (wsp[-1] == ' ' || wsp[-1] == '\t')) --wsp;
+	    if (wsp != str)
+	    {
+		mnputs(out, str, wsp-str);
+		nl = 0;
+	    }
+	    if (wsp == endp) wsp = 0;
 	}
 	str = endp;
 	if (endp == period)
 	{
+	    if (wsp) mnputs(out, wsp, endp-wsp);
 	    fputc(*str++, out);
 	    fputc('\n', out);
 	    nl = 1;
