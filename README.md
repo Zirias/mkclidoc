@@ -1,13 +1,13 @@
 # mkclidoc - Simple documentation generator for CLI utilities
 
 This is a very rudimentary tool to read a description of a command line
-utility in a simple text format and produce output in C preprocessor,
-troff/man or mandoc format. It only supports utilities using single-letter
-flags preceded by a dash (POSIX style).
+utility in a simple text format and produce output in C preprocessor, shell
+script, troff/man or mandoc format. It only supports utilities using
+single-letter flags preceded by a dash (POSIX style).
 
 ## Usage
 
-    Usage: mkclidoc [-f <cpp|man|mdoc>[,args]] [-o outfile] [infile]
+    Usage: mkclidoc [-f <cpp|man|mdoc|sh>[,args]] [-o outfile] [infile]
 
 * `-f format,args`: Output format with optional format-specific args,
   defaults to `man`.
@@ -16,6 +16,7 @@ flags preceded by a dash (POSIX style).
   - `mdoc`: A manpage in (BSD) mandoc format
     * `mdoc,os`: Override the mandoc `.Os` value with the tool name and
       version
+  - `sh`: A shell script snippet defining usage() and help() functions
 * `-o outfile`: Optional output file, writes to `stdout` by default
 * `infile`: Optional input file, reads from `stdin` by default
 
@@ -104,8 +105,6 @@ A blank line somewhere inside a text block starts a new paragraph.
 
 Manpage output is only rudimentarily escaped, so you might easily find edge
 cases producing garbage output or even crashing.
-
-The output formats aren't configurable.
 
 The tool does not sort flags, you are expected to keep them in alphabetical
 order (with uppercase flags first) in your input file.
