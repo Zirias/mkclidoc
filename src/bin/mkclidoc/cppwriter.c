@@ -317,9 +317,14 @@ static void writeArgDesc(FILE *out, Ctx *ctx,
     }
 }
 
-int writeCpp(FILE *out, const CliDoc *root)
+int writeCpp(FILE *out, const CliDoc *root, const char *args)
 {
     assert(CliDoc_type(root) == CT_ROOT);
+    if (args)
+    {
+	fputs("The cpp format does not support any arguments.\n", stderr);
+	return -1;
+    }
 
     const CliDoc *name = CDRoot_name(root);
     if (!istext(name)) err("missing name");

@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef int (*writer)(FILE *out, const CliDoc *root);
+typedef int (*writer)(FILE *out, const CliDoc *root, const char *args);
 
 static const struct {
     const char *name;
@@ -18,6 +18,7 @@ static const struct {
 };
 
 static writer currentWriter = writeMan;
+char *writerArgs = 0;
 const char *infilename = 0;
 const char *outfilename = 0;
 static FILE *infile = 0;
@@ -47,6 +48,12 @@ int main(int argc, char **argv)
 		    arg = *++argv;
 		} else arg = *argv + 2;
 		currentWriter = 0;
+		writerArgs = strchr(arg, ',');
+		if (writerArgs)
+		{
+		    *writerArgs++ = 0;
+		    if (!*writerArgs) writerArgs = 0;
+		}
 		for (unsigned i = 0; i < sizeof writers / sizeof *writers; ++i)
 		{
 		    if (!strcmp(arg, writers[i].name))
@@ -93,7 +100,7 @@ int main(int argc, char **argv)
     }
 
     if (!(doc = CliDoc_create(in))) goto done;
-    if (currentWriter(out, doc) < 0) goto done;
+    if (currentWriter(out, doc, writerArgs) < 0) goto done;
     rc = EXIT_SUCCESS;
 
 done:
@@ -103,8 +110,8 @@ done:
     return rc;
 
 usage:
-    fprintf(stderr, "Usage: %s [-f <cpp|man|mdoc>] [-o outfile] [infile]\n",
-	    name);
+    fprintf(stderr, "Usage: %s [-f <cpp|man|mdoc>[,args]]"
+	    "[-o outfile] [infile]\n", name);
     return EXIT_FAILURE;
 }
 

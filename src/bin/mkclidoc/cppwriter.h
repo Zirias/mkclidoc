@@ -7,7 +7,7 @@
 
 C_CLASS_DECL(CliDoc);
 
-int writeCpp(FILE *out, const CliDoc *root)
+int writeCpp(FILE *out, const CliDoc *root, const char *args)
     ATTR_NONNULL((1)) ATTR_NONNULL((2));
 
 #endif

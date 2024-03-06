@@ -516,8 +516,12 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	snprintf(strbuf + mlen, sizeof strbuf - mlen,
 		" %d, %d", tm->tm_mday, tm->tm_year + 1900);
 	fprintf(out, ".Dd %s", strbuf);
-	fprintf(out, "\n.Dt %s 1\n.Os %s", strToUpper(ctx.name), ctx.name);
-	if (istext(version)) fprintf(out, " %s", CDText_str(version));
+	fprintf(out, "\n.Dt %s 1\n.Os", strToUpper(ctx.name));
+	if (mdoc == 2)
+	{
+	    fprintf(out, " %s", ctx.name);
+	    if (istext(version)) fprintf(out, " %s", CDText_str(version));
+	}
 	fprintf(out, "\n.Sh NAME\n.Nm %s\n.Nd %s",
 		ctx.name, CDText_str(comment));
     }
@@ -633,13 +637,30 @@ error:
     return -1;
 }
 
-int writeMan(FILE *out, const CliDoc *root)
+int writeMan(FILE *out, const CliDoc *root, const char *args)
 {
+    if (args)
+    {
+	fputs("The man format does not support any arguments.\n", stderr);
+	return -1;
+    }
     return write(out, root, 0);
 }
 
-int writeMdoc(FILE *out, const CliDoc *root)
+int writeMdoc(FILE *out, const CliDoc *root, const char *args)
 {
-    return write(out, root, 1);
+    int mdoc = 1;
+    if (args)
+    {
+	if (!strcmp(args, "os")) ++mdoc;
+	else
+	{
+	    fprintf(stderr, "Unknown arguments for mdoc format: %s\n", args);
+	    fputs("Supported: os  [Override operating system with "
+		    "tool name and version]\n", stderr);
+	    return -1;
+	}
+    }
+    return write(out, root, mdoc);
 }
 
