@@ -573,7 +573,7 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	    if (!mdoc) fputs("\n.TP 8n", out);
 	    const CliDoc *arg = CDRoot_arg(root, i);
 	    ctx.arg = CDArg_arg(arg);
-	    fprintf(out, mdoc ? "\n.It .Ar %s" : "\n\\fI%s\\fR", ctx.arg);
+	    fprintf(out, mdoc ? "\n.It Ar %s" : "\n\\fI%s\\fR", ctx.arg);
 	    if (writeManArgDesc(out, &ctx, arg) < 0) goto error;
 	}
 	if (mdoc) fputs("\n.El", out);
