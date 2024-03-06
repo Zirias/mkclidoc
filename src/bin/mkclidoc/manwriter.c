@@ -44,14 +44,45 @@ static void mputc(FILE *out, int c)
     if (c == '\\') fputc(c, out);
 }
 
-static void mputs(FILE *out, const char *s)
-{
-    while (*s) mputc(out, *s++);
-}
-
 static void mnputs(FILE *out, const char *s, size_t n)
 {
-    while (n--) mputc(out, *s++);
+    size_t i = 0;
+    size_t p = 0;
+    while (*s == ' ' || *s == '\t') ++s, --n;
+    while (!n || i < n)
+    {
+	size_t wl = 0;
+	size_t ol = 0;
+	size_t sl = 0;
+	const char *word = s;
+	while (*word == ' ' || *word == '\t') ++word, ++sl;
+	while (word[wl] && word[wl] != ' ' && word[wl] != '\t')
+	{
+	    if (word[wl] == '\\') ++ol;
+	    ++wl, ++ol;
+	}
+	if (!*word) break;
+	i += wl + sl;
+	if (n && i > n) wl -= (i - n);
+	if (p && p + ol > 78)
+	{
+	    fputc('\n', out);
+	    p = ol;
+	    while (wl--) mputc(out, *word++);
+	    s = word;
+	}
+	else
+	{
+	    wl += sl;
+	    p += ol + sl;
+	    while (wl--) mputc(out, *s++);
+	}
+    }
+}
+
+static void mputs(FILE *out, const char *s)
+{
+    mnputs(out, s, 0);
 }
 
 static void writeManText(FILE *out, Ctx *ctx, const char *str)
