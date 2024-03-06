@@ -495,10 +495,74 @@ int writeCpp(FILE *out, const CliDoc *root, const char *args)
 
 int writeSh(FILE *out, const CliDoc *root, const char *args)
 {
+    const char *sub = "%%CLIDOC%%";
+    const char *fname = 0;
+    FILE *tmpl = 0;
+    int rc = -1;
+    char buf[512];
+
     if (args)
     {
-	fputs("The sh format does not support any arguments.\n", stderr);
-	return -1;
+	if (!strncmp(args, "t=", 2))
+	{
+	    char *tmp = 0;
+	    char *colon = strchr(args + 2, ':');
+	    if (colon)
+	    {
+		sub = colon+1;
+		tmp = xmalloc(colon - args - 1);
+		strncpy(tmp, args + 2, colon - args - 2);
+		tmp[colon - args - 2] = 0;
+		fname = tmp;
+	    }
+	    else fname = args + 2;
+	    tmpl = fopen(fname, "r");
+	    free(tmp);
+	    if (!tmpl)
+	    {
+		fprintf(stderr, "Can't open %s for reading.", fname);
+		goto done;
+	    }
+	}
+	else
+	{
+	    fprintf(stderr, "Unknown arguments for sh format: %s\n", args);
+	    fputs("Supported: t=<file>[:sub] (use a template file)\n", stderr);
+	    goto done;
+	}
     }
-    return write(out, root, 0);
+    if (tmpl)
+    {
+	int sublen = strlen(sub);
+	while (fgets(buf, sizeof buf, tmpl))
+	{
+	    if (!strncmp(buf, sub, sublen) && buf[sublen] == '\n') break;
+	    fputs(buf, out);
+	}
+	if (ferror(tmpl))
+	{
+	    fprintf(stderr, "Error reading %s\n", fname);
+	    goto done;
+	}
+	if (feof(tmpl))
+	{
+	    fprintf(stderr, "%s not found in %s\n", sub, fname);
+	    goto done;
+	}
+    }
+    rc = write(out, root, 0);
+    if (rc < 0) goto done;
+    if (tmpl)
+    {
+	while (fgets(buf, sizeof buf, tmpl)) fputs(buf, out);
+	if (ferror(tmpl))
+	{
+	    fprintf(stderr, "Error reading %s\n", fname);
+	    rc = -1;
+	}
+    }
+
+done:
+    if (tmpl) fclose(tmpl);
+    return rc;
 }
