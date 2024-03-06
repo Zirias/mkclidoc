@@ -7,12 +7,15 @@ flags preceded by a dash (POSIX style).
 
 ## Usage
 
-    Usage: mkclidoc [-f <cpp|man|mdoc>] [-o outfile] [infile]
+    Usage: mkclidoc [-f <cpp|man|mdoc>[,args]] [-o outfile] [infile]
 
-* `-f format`: Output format, defaults to `man`
+* `-f format,args`: Output format with optional format-specific args,
+  defaults to `man`.
   - `cpp`: A set of C preprocessor macros to print usage and help messages
   - `man`: A manpage in classic troff/man format
   - `mdoc`: A manpage in (BSD) mandoc format
+    * `mdoc,os`: Override the mandoc `.Os` value with the tool name and
+      version
 * `-o outfile`: Optional output file, writes to `stdout` by default
 * `infile`: Optional input file, reads from `stdin` by default
 
