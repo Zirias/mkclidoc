@@ -25,6 +25,8 @@ typedef struct Ctx
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
 #define istext(m) ((m) && CliDoc_type(m) == CT_TEXT)
 #define ismpunct(c) (ispunct(c) && (c) != '\\' && (c) != '%' && (c) != '`')
+#define istpunct(s) (ismpunct(*(s)) && \
+	(!(s)[1] || (s)[1] == ' ' || (s)[1] == '\t'))
 
 static char strbuf[8192];
 
@@ -44,7 +46,7 @@ static char *fetchManTextWord(const char **s)
 {
     size_t wordlen = 0;
     while (**s && **s != ' ' && **s != '\t'
-	    && !ismpunct(**s) && wordlen < 4096)
+	    && !istpunct(*s) && wordlen < 4096)
     {
 	if (**s == '%')
 	{
