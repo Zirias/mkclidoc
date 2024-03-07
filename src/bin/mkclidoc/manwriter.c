@@ -143,7 +143,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		    oneword = 1;
 		}
 		else if (*str == ' ' || *str == '\t') nl = 1;
-		else
+		else if (*str)
 		{
 		    fputs(" Ns ", out);
 		    oneword = 1;
@@ -152,7 +152,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    else
 	    {
 		if (*str == ' ' || *str == '\t') nl = 1;
-		else oneword = 1;
+		else if (*str) oneword = 1;
 	    }
 	    continue;
 	}
@@ -182,7 +182,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 			oneword = 1;
 		    }
 		    else if (*str == ' ' || *str == '\t') nl = 1;
-		    else
+		    else if (*str)
 		    {
 			fputs(" Ns ", out);
 			oneword = 1;
@@ -191,7 +191,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		else
 		{
 		    if (*str == ' ' || *str == '\t') nl = 1;
-		    else oneword = 1;
+		    else if (*str) oneword = 1;
 		}
 		continue;
 	    }
@@ -215,7 +215,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 			oneword = 1;
 		    }
 		    else if (*str == ' ' || *str == '\t') nl = 1;
-		    else
+		    else if (*str)
 		    {
 			fputs(" Ns ", out);
 			oneword = 1;
@@ -224,7 +224,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		else
 		{
 		    if (*str == ' ' || *str == '\t') nl = 1;
-		    else oneword = 1;
+		    else if (*str) oneword = 1;
 		}
 		continue;
 	    }
