@@ -16,6 +16,7 @@ typedef enum ContentType
     CT_LIST,
     CT_DICT,
     CT_TABLE,
+    CT_NAMED,
     CT_TEXT,
     CT_DATE,
     CT_MREF
@@ -37,6 +38,8 @@ size_t CDRoot_nflags(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_flag(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
 size_t CDRoot_nargs(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_arg(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
+size_t CDRoot_nfiles(const CliDoc *self) CMETHOD ATTR_PURE;
+const CliDoc *CDRoot_file(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
 size_t CDRoot_nrefs(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_ref(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
 int CDRoot_defgroup(const CliDoc *self) CMETHOD ATTR_PURE;
@@ -69,6 +72,9 @@ size_t CDTable_width(const CliDoc *self) CMETHOD ATTR_PURE;
 size_t CDTable_height(const CliDoc *self) CMETHOD ATTR_PURE;
 const char *CDTable_cell(const CliDoc *self, size_t x, size_t y)
     CMETHOD ATTR_PURE;
+
+const char *CDNamed_name(const CliDoc *self) CMETHOD ATTR_PURE;
+const CliDoc *CDNamed_description(const CliDoc *self) CMETHOD ATTR_PURE;
 
 const char *CDText_str(const CliDoc *self) CMETHOD ATTR_PURE;
 

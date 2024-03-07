@@ -16,6 +16,7 @@ C_CLASS_DECL(CDFlag);
 C_CLASS_DECL(CDList);
 C_CLASS_DECL(CDDict);
 C_CLASS_DECL(CDTable);
+C_CLASS_DECL(CDNamed);
 C_CLASS_DECL(CDText);
 C_CLASS_DECL(CDDate);
 C_CLASS_DECL(CDMRef);
@@ -40,8 +41,10 @@ struct CDRoot
     CDList *mrefs;
     CDFlag **flags;
     CDArg **args;
+    CDNamed **files;
     size_t nflags;
     size_t nargs;
+    size_t nfiles;
     int defgroup;
 };
 
@@ -88,6 +91,13 @@ struct CDTable
     char **cells;
 };
 
+struct CDNamed
+{
+    CliDoc base;
+    CliDoc *description;
+    char *name;
+};
+
 struct CDText
 {
     CliDoc base;
@@ -123,8 +133,10 @@ static int parsemref(Parser *p, CDList **val, CliDoc *parent);
 static int parsemrefs(Parser *p, CDList **val, CliDoc *parent);
 static int parseint(Parser *p, int *intval);
 static int parseargvals(Parser *p, CDArg *arg);
+static int parsenamedvals(Parser *p, CDNamed *named);
 static int parseflag(Parser *p, CDRoot *root);
 static int parsearg(Parser *p, CDRoot *root);
+static int parsefile(Parser *p, CDRoot *root);
 static int parse(CDRoot *root, FILE *doc);
 
 #define isws(c) (c == ' ' || c == '\t')
@@ -594,6 +606,45 @@ error:
     return -1;
 }
 
+static int parsenamedvals(Parser *p, CDNamed *named)
+{
+    for (;;)
+    {
+	if (!p->line)
+	{
+	    if (!nextline) break;
+	}
+	skipws(p->line);
+	if (!*p->line) err("Expected end of line");
+
+	if (*p->line == '\n')
+	{
+	    p->line = 0;
+	    continue;
+	}
+	if (*p->line == '[')
+	{
+	    break;
+	}
+	char *tmp;
+	if (isws(*p->line) || *p->line == ':') err("Empty key");
+	else tmp = strchr(p->line, ':');
+	if (!tmp || tmp == p->line) err("Expected key");
+	*tmp = 0;
+	CliDoc **val = 0;
+	if (!strcmp(p->line, "description")) val = &named->description;
+	else err("Unknown key");
+	if (val && *val) err("Duplicate key");
+	p->line = tmp+1;
+	skipws(p->line);
+	if (parseval(p, val, (CliDoc *)named) < 0) goto error;
+    }
+    return 0;
+
+error:
+    return -1;
+}
+
 static int parseflag(Parser *p, CDRoot *root)
 {
     char *tmp = strchr(p->line, '\n');
@@ -660,6 +711,34 @@ error:
     return -1;
 }
 
+static int parsefile(Parser *p, CDRoot *root)
+{
+    char *tmp = strchr(p->line, '\n');
+    if (!tmp) err("Expected end of line");
+    skipwsb(tmp);
+    --tmp;
+    if (tmp <= p->line) err("Unexpected end of line");
+    if (*tmp != ']') err("Tag not closed");
+    skipws(p->line);
+    if (p->line == tmp) err("Missing file name");
+    CDNamed *file = xmalloc(sizeof *file);
+    memset(file, 0, sizeof *file);
+    file->base.parent = (CliDoc *)root;
+    file->base.type = CT_NAMED;
+    root->files = xrealloc(root->files,
+	    (root->nfiles+1) * sizeof *root->files);
+    root->files[root->nfiles++] = file;
+    size_t filelen = tmp - p->line;
+    file->name = xmalloc(filelen + 1);
+    strncpy(file->name, p->line, filelen);
+    file->name[filelen] = 0;
+    p->line = 0;
+    return parsenamedvals(p, file);
+
+error:
+    return -1;
+}
+
 static int parse(CDRoot *root, FILE *doc)
 {
     Parser parser = { doc, 0, 0, {0} };
@@ -691,6 +770,11 @@ static int parse(CDRoot *root, FILE *doc)
 	    {
 		p->line += 5;
 		if (parsearg(p, root) < 0) goto error;
+	    }
+	    else if (!strncmp(p->line+1, "file ", 5))
+	    {
+		p->line += 6;
+		if (parsefile(p, root) < 0) goto error;
 	    }
 	    else err("Unknown tag");
 	    continue;
@@ -836,6 +920,18 @@ const CliDoc *CDRoot_arg(const CliDoc *self, size_t i)
     return (const CliDoc *)((const CDRoot *)self)->args[i];
 }
 
+size_t CDRoot_nfiles(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->nfiles;
+}
+
+const CliDoc *CDRoot_file(const CliDoc *self, size_t i)
+{
+    assert(i < CDRoot_nfiles(self));
+    return (const CliDoc *)((const CDRoot *)self)->files[i];
+}
+
 size_t CDRoot_nrefs(const CliDoc *self)
 {
     assert(self->type == CT_ROOT);
@@ -955,6 +1051,18 @@ const char *CDTable_cell(const CliDoc *self, size_t x, size_t y)
     return table->cells[table->width * y + x];
 }
 
+const char *CDNamed_name(const CliDoc *self)
+{
+    assert(self->type == CT_NAMED);
+    return ((const CDNamed *)self)->name;
+}
+
+const CliDoc *CDNamed_description(const CliDoc *self)
+{
+    assert(self->type == CT_NAMED);
+    return ((const CDNamed *)self)->description;
+}
+
 const char *CDText_str(const CliDoc *self)
 {
     assert(self->type == CT_TEXT);
@@ -989,6 +1097,13 @@ static void CDText_destroy(CliDoc *self)
 {
     CDText *text = (CDText *)self;
     free(text->text);
+}
+
+static void CDNamed_destroy(CliDoc *self)
+{
+    CDNamed *named = (CDNamed *)self;
+    CliDoc_destroy(named->description);
+    free(named->name);
 }
 
 static void CDList_destroy(CliDoc *self)
@@ -1060,6 +1175,14 @@ static void CDRoot_destroy(CliDoc *self)
 	}
 	free(root->args);
     }
+    if (root->nfiles)
+    {
+	for (size_t i = 0; i < root->nfiles; ++i)
+	{
+	    CliDoc_destroy((CliDoc *)root->files[i]);
+	}
+	free(root->files);
+    }
 }
 
 void CliDoc_destroy(CliDoc *self)
@@ -1073,6 +1196,7 @@ void CliDoc_destroy(CliDoc *self)
 	case CT_LIST: CDList_destroy(self); break;
 	case CT_DICT: CDDict_destroy(self); break;
 	case CT_TABLE: CDTable_destroy(self); break;
+	case CT_NAMED: CDNamed_destroy(self); break;
 	case CT_TEXT: CDText_destroy(self); break;
 	case CT_MREF: CDMRef_destroy(self); break;
 	case CT_DATE:

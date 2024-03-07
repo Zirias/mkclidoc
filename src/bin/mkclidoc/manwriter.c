@@ -634,6 +634,24 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	else fputs("\n.PD", out);
     }
 
+    size_t nfiles = CDRoot_nfiles(root);
+    if (nfiles)
+    {
+	if (mdoc) fputs("\n.Sh FILES", out);
+	else fputs("\n.SH \"FILES\"", out);
+	if (mdoc) fputs("\n.Bl -tag -width Ds", out);
+	for (size_t i = 0; i < nfiles; ++i)
+	{
+	    if (!mdoc) fputs("\n.TP 8n", out);
+	    const CliDoc *file = CDRoot_file(root, i);
+	    fprintf(out, mdoc ? "\n.It Pa %s" : "\n\\fI%s\\fR",
+		    CDNamed_name(file));
+	    if (writeManDescription(out, &ctx,
+			CDNamed_description(file), 0) < 0) goto error;
+	}
+	if (mdoc) fputs("\n.El", out);
+    }
+
     size_t nrefs = CDRoot_nrefs(root);
     if (nrefs)
     {
