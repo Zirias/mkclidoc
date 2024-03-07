@@ -17,7 +17,8 @@ typedef enum ContentType
     CT_DICT,
     CT_TABLE,
     CT_TEXT,
-    CT_DATE
+    CT_DATE,
+    CT_MREF
 } ContentType;
 
 CliDoc *CliDoc_create(FILE *doc);
@@ -36,6 +37,8 @@ size_t CDRoot_nflags(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_flag(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
 size_t CDRoot_nargs(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_arg(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
+size_t CDRoot_nrefs(const CliDoc *self) CMETHOD ATTR_PURE;
+const CliDoc *CDRoot_ref(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
 int CDRoot_defgroup(const CliDoc *self) CMETHOD ATTR_PURE;
 
 const CliDoc *CDArg_description(const CliDoc *self) CMETHOD ATTR_PURE;
@@ -70,6 +73,9 @@ const char *CDTable_cell(const CliDoc *self, size_t x, size_t y)
 const char *CDText_str(const CliDoc *self) CMETHOD ATTR_PURE;
 
 time_t CDDate_date(const CliDoc *self) CMETHOD ATTR_PURE;
+
+const char *CDMRef_name(const CliDoc *self) CMETHOD ATTR_PURE;
+const char *CDMRef_section(const CliDoc *self) CMETHOD ATTR_PURE;
 
 void CliDoc_destroy(CliDoc *self);
 

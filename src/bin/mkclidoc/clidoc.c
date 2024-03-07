@@ -18,6 +18,7 @@ C_CLASS_DECL(CDDict);
 C_CLASS_DECL(CDTable);
 C_CLASS_DECL(CDText);
 C_CLASS_DECL(CDDate);
+C_CLASS_DECL(CDMRef);
 
 struct CliDoc
 {
@@ -36,6 +37,7 @@ struct CDRoot
     CliDoc *description;
     CliDoc *date;
     CliDoc *www;
+    CDList *mrefs;
     CDFlag **flags;
     CDArg **args;
     size_t nflags;
@@ -98,6 +100,13 @@ struct CDDate
     time_t date;
 };
 
+struct CDMRef
+{
+    CliDoc base;
+    char *name;
+    const char *section;
+};
+
 typedef struct Parser
 {
     FILE *doc;
@@ -110,6 +119,8 @@ static void setoradd(CliDoc **val, CliDoc *item);
 static int parsetable(Parser *p, CliDoc **val, CliDoc *parent);
 static int parsedict(Parser *p, CliDoc **val, CliDoc *parent);
 static int parseval(Parser *p, CliDoc **val, CliDoc *parent);
+static int parsemref(Parser *p, CDList **val, CliDoc *parent);
+static int parsemrefs(Parser *p, CDList **val, CliDoc *parent);
 static int parseint(Parser *p, int *intval);
 static int parseargvals(Parser *p, CDArg *arg);
 static int parseflag(Parser *p, CDRoot *root);
@@ -378,6 +389,105 @@ error:
     return -1;
 }
 
+static int parsemref(Parser *p, CDList **val, CliDoc *parent)
+{
+    char *name = 0;
+    const char *section = 0;
+    CDMRef *mref = 0;
+
+    size_t wordlen = strcspn(p->line, " \t");
+    size_t namelen = 0;
+    size_t sectpos = 0;
+    name = xmalloc(wordlen + 3);
+    for (size_t i = 0; i < wordlen; ++i)
+    {
+	if (p->line[i] == '\\')
+	{
+	    if (++i == wordlen) err("stray backslash");
+	}
+	else if (!sectpos && p->line[i] == '.')
+	{
+	    p->line[i] = 0;
+	    sectpos = namelen + 1;
+	}
+	name[namelen++] = p->line[i];
+    }
+    if (!sectpos)
+    {
+	sectpos = namelen + 1;
+	name[namelen++] = 0;
+	name[namelen++] = '1';
+    }
+    name[namelen] = 0;
+    name = xrealloc(name, namelen + 1);
+    section = name + sectpos;
+    p->line += wordlen;
+    skipws(p->line);
+
+    size_t pos;
+    if (!*val)
+    {
+	pos = 0;
+	CDList *list = xmalloc(sizeof *list);
+	list->base.parent = parent;
+	list->base.type = CT_LIST;
+	list->n = 1;
+	list->c = xmalloc(1 * sizeof *list->c);
+	*val = list;
+    }
+    else
+    {
+	pos = (*val)->n++;
+	(*val)->c = xrealloc((*val)->c, (*val)->n * sizeof (*val)->c);
+    }
+    mref = xmalloc(sizeof *mref);
+    mref->base.type = CT_MREF;
+    mref->name = name;
+    mref->section = section;
+    mref->base.parent = (CliDoc *)*val;
+    (*val)->c[pos] = (CliDoc *)mref;
+    return 0;
+
+error:
+    free(name);
+    return -1;
+}
+
+static int parsemrefs(Parser *p, CDList **val, CliDoc *parent)
+{
+    char *tmp;
+    if (*p->line == '\n')
+    {
+	for (;;)
+	{
+	    if (*p->line != '\n')
+	    {
+		if (*p->line == '.' && p->line[1] == '\n') break;
+		tmp = strchr(p->line, '\n');
+		if (!tmp) err("Expected end of line");
+		skipwsb(tmp);
+		*tmp = 0;
+		while (p->line < tmp) parsemref(p, val, parent);
+	    }
+	    if (!nextline) err("Unexpected end of file");
+	    skipws(p->line);
+	}
+    }
+    else
+    {
+	tmp = strchr(p->line, '\n');
+	if (!tmp) err("Expected end of line");
+	skipwsb(tmp);
+	*tmp = 0;
+	while (p->line < tmp) parsemref(p, val, parent);
+    }
+    p->line = 0;
+    return 0;
+
+error:
+    return -1;
+}
+
 static int parseint(Parser *p, int *intval)
 {
     if (*p->line == '\n') err("Empty value");
@@ -593,6 +703,7 @@ static int parse(CDRoot *root, FILE *doc)
 	*tmp = 0;
 	int *intval = 0;
 	CliDoc **val = 0;
+	CDList **refs = 0;
 	CliDoc **dateval = 0;
 	if (!strcmp(p->line, "name")) val = &root->name;
 	else if (!strcmp(p->line, "version")) val = &root->version;
@@ -602,6 +713,7 @@ static int parse(CDRoot *root, FILE *doc)
 	else if (!strcmp(p->line, "description")) val = &root->description;
 	else if (!strcmp(p->line, "date")) dateval = &root->date;
 	else if (!strcmp(p->line, "www")) val = &root->www;
+	else if (!strcmp(p->line, "manrefs")) refs = &root->mrefs;
 	else if (!strcmp(p->line, "defgroup")) intval = &root->defgroup;
 	else err("Unknown key");
 	if (val && *val) err("Duplicate key");
@@ -615,6 +727,10 @@ static int parse(CDRoot *root, FILE *doc)
 	else if (dateval)
 	{
 	    if (parsedate(p, dateval, (CliDoc *)root) < 0) goto error;
+	}
+	else if (refs)
+	{
+	    if (parsemrefs(p, refs, (CliDoc *)root) < 0) goto error;
 	}
 	else if (parseval(p, val, (CliDoc *)root) < 0) goto error;
     }
@@ -718,6 +834,22 @@ const CliDoc *CDRoot_arg(const CliDoc *self, size_t i)
 {
     assert(i < CDRoot_nargs(self));
     return (const CliDoc *)((const CDRoot *)self)->args[i];
+}
+
+size_t CDRoot_nrefs(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    const CDList *list = ((const CDRoot *)self)->mrefs;
+    if (!list) return 0;
+    return CDList_length((const CliDoc *)list);
+}
+
+const CliDoc *CDRoot_ref(const CliDoc *self, size_t i)
+{
+    assert(self->type == CT_ROOT);
+    const CDList *list = ((const CDRoot *)self)->mrefs;
+    assert(list != 0);
+    return CDList_entry((const CliDoc *)list, i);
 }
 
 int CDRoot_defgroup(const CliDoc *self)
@@ -835,6 +967,24 @@ time_t CDDate_date(const CliDoc *self)
     return ((const CDDate *)self)->date;
 }
 
+const char *CDMRef_name(const CliDoc *self)
+{
+    assert(self->type == CT_MREF);
+    return ((const CDMRef *)self)->name;
+}
+
+const char *CDMRef_section(const CliDoc *self)
+{
+    assert(self->type == CT_MREF);
+    return ((const CDMRef *)self)->section;
+}
+
+static void CDMRef_destroy(CliDoc *self)
+{
+    CDMRef *mref = (CDMRef *)self;
+    free(mref->name);
+}
+
 static void CDText_destroy(CliDoc *self)
 {
     CDText *text = (CDText *)self;
@@ -893,6 +1043,7 @@ static void CDRoot_destroy(CliDoc *self)
     CliDoc_destroy(root->description);
     CliDoc_destroy(root->date);
     CliDoc_destroy(root->www);
+    CliDoc_destroy((CliDoc *)root->mrefs);
     if (root->nflags)
     {
 	for (size_t i = 0; i < root->nflags; ++i)
@@ -923,6 +1074,7 @@ void CliDoc_destroy(CliDoc *self)
 	case CT_DICT: CDDict_destroy(self); break;
 	case CT_TABLE: CDTable_destroy(self); break;
 	case CT_TEXT: CDText_destroy(self); break;
+	case CT_MREF: CDMRef_destroy(self); break;
 	case CT_DATE:
 	default: break;
     }
