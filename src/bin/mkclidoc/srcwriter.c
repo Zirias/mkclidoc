@@ -20,7 +20,7 @@ typedef struct Ctx
 static void srcputc(FILE *out, const Ctx *ctx, int c)
 {
     if (c == '\\' || c == '"') fputc('\\', out);
-    if (!ctx->cpp && c == '$') fputc('\\', out);
+    if (!ctx->cpp && (c == '$' || c == '`')) fputc('\\', out);
     fputc(c, out);
 }
 
