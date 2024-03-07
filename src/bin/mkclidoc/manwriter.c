@@ -24,6 +24,7 @@ typedef struct Ctx
 #define err(m) do { \
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
 #define istext(m) ((m) && CliDoc_type(m) == CT_TEXT)
+#define ismpunct(c) (ispunct(c) && (c) != '\\' && (c) != '%' && (c) != '`')
 
 static char strbuf[8192];
 
@@ -42,8 +43,8 @@ static char *strToUpper(const char *str)
 static char *fetchManTextWord(const char **s)
 {
     size_t wordlen = 0;
-    while (**s && (**s == ' ' || **s == '\t')) ++(*s);
-    while (**s && **s != ' ' && **s != '\t' && **s != '.' && wordlen < 4096)
+    while (**s && **s != ' ' && **s != '\t'
+	    && !ismpunct(**s) && wordlen < 4096)
     {
 	if (**s == '%')
 	{
@@ -74,13 +75,45 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 {
     size_t col = 0;
     int oneword = 0;
+    int nl = 0;
     while (*str)
     {
-	int nl = 0;
-	if (*str == '.')
+	int space = 0;
+	while (*str && (*str == ' ' || *str == '\t')) ++str, space = 1;
+	if (!*str) break;
+
+	if (*str == '.' && (!str[1] || str[1] == ' ' || str[1] == '\t'))
 	{
+	    if (nl) fputc(' ', out);
 	    fputc(*str++, out);
 	    nl = 1;
+	    continue;
+	}
+	if (ismpunct(*str))
+	{
+	    if (nl)
+	    {
+		fputc('\n', out);
+		col = 0;
+		nl = 0;
+	    }
+	    if (col && space) fputc(' ', out), ++col;
+	    size_t punctlen = 1;
+	    while (ismpunct(str[punctlen]) && str[punctlen] != '.') ++punctlen;
+	    if (col && col + punctlen > 78)
+	    {
+		fputc('\n', out);
+		col = 0;
+	    }
+	    fwrite(str, 1, punctlen, out);
+	    str += punctlen;
+	    col += punctlen;
+	    if (oneword)
+	    {
+		oneword = 0;
+		col = 80;
+	    }
+	    continue;
 	}
 
 	char *word = fetchManTextWord(&str);
@@ -101,15 +134,12 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    }
 	    if (ctx->mdoc)
 	    {
-		if (*str == '.' || *str == ',' || *str == ':' || *str == ';')
+		if (ismpunct(*str))
 		{
-		    fprintf(out, " %c\n", *str++);
+		    fputc(' ', out);
+		    oneword = 1;
 		}
-		else if (*str == ' ' || *str == '\t')
-		{
-		    fputc('\n', out);
-		    col = 0;
-		}
+		else if (*str == ' ' || *str == '\t') nl = 1;
 		else
 		{
 		    fputs(" Ns ", out);
@@ -118,23 +148,58 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    }
 	    else
 	    {
-		if (*str == ' ' || *str == '\t')
-		{
-		    fputc('\n', out);
-		    col = 0;
-		}
+		if (*str == ' ' || *str == '\t') nl = 1;
 		else oneword = 1;
 	    }
 	    continue;
 	}
 	size_t wordlen = strlen(word);
+	if (word[0] == '`' && word[wordlen-1] == '`')
+	{
+	    const CliDoc *ref = 0;
+	    for (size_t i = 0; i < CDRoot_nrefs(ctx->root); ++i)
+	    {
+		const CliDoc *r = CDRoot_ref(ctx->root, i);
+		if (!strncmp(CDMRef_name(r), word+1, wordlen-2))
+		{
+		    ref = r;
+		    break;
+		}
+	    }
+	    if (ref)
+	    {
+		if (col) fputc('\n', out);
+		fprintf(out, ctx->mdoc ? ".Xr %s %s" : "\\fB%s\\fP(%s)\\fR",
+			CDMRef_name(ref), CDMRef_section(ref));
+		if (ctx->mdoc)
+		{
+		    if (ismpunct(*str))
+		    {
+			fputc(' ', out);
+			oneword = 1;
+		    }
+		    else if (*str == ' ' || *str == '\t') nl = 1;
+		    else
+		    {
+			fputs(" Ns ", out);
+			oneword = 1;
+		    }
+		}
+		else
+		{
+		    if (*str == ' ' || *str == '\t') nl = 1;
+		    else oneword = 1;
+		}
+		continue;
+	    }
+	}
 	if (nl || col + !!col + wordlen > 78)
 	{
 	    fputc('\n', out);
 	    col = 0;
 	    nl = 0;
 	}
-	if (col) ++col, fputc(' ', out);
+	if (col && space) ++col, fputc(' ', out);
 	fputs(word, out);
 	if (oneword)
 	{
