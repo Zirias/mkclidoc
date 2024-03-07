@@ -24,7 +24,8 @@ typedef struct Ctx
 #define err(m) do { \
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
 #define istext(m) ((m) && CliDoc_type(m) == CT_TEXT)
-#define ismpunct(c) (ispunct(c) && (c) != '\\' && (c) != '%' && (c) != '`')
+#define ismpunct(c) (ispunct(c) && (c) != '\\' && (c) != '%' \
+	&& (c) != '`' && (c) != '<' && (c) != '>')
 #define istpunct(s) (ismpunct(*(s)) && \
 	(!(s)[1] || (s)[1] == ' ' || (s)[1] == '\t'))
 
@@ -173,6 +174,39 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		if (col) fputc('\n', out);
 		fprintf(out, ctx->mdoc ? ".Xr %s %s" : "\\fB%s\\fP(%s)\\fR",
 			CDMRef_name(ref), CDMRef_section(ref));
+		if (ctx->mdoc)
+		{
+		    if (ismpunct(*str))
+		    {
+			fputc(' ', out);
+			oneword = 1;
+		    }
+		    else if (*str == ' ' || *str == '\t') nl = 1;
+		    else
+		    {
+			fputs(" Ns ", out);
+			oneword = 1;
+		    }
+		}
+		else
+		{
+		    if (*str == ' ' || *str == '\t') nl = 1;
+		    else oneword = 1;
+		}
+		continue;
+	    }
+	}
+	else if (word[0] == '<' && word[wordlen-1] == '>')
+	{
+	    int islink = !!strstr(word+1, "://");
+	    int isemail = !islink && !!strchr(word+1, '@');
+	    if (islink || isemail)
+	    {
+		word[wordlen-1] = 0;
+		++word;
+		if (col) fputc('\n', out);
+		fprintf(out, ctx->mdoc ? ( isemail ? ".Aq Mt %s" : ".Lk %s" )
+			: ( isemail ? "<\\fI%s\\fR>" : "\\fB%s\\fR" ), word);
 		if (ctx->mdoc)
 		{
 		    if (ismpunct(*str))
