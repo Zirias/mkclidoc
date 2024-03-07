@@ -610,6 +610,20 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	else fputs("\n.PD\n.PP", out);
     }
 
+    size_t nrefs = CDRoot_nrefs(root);
+    if (nrefs)
+    {
+	if (mdoc) fputs("\n.Sh SEE ALSO", out);
+	else fputs("\n.SH \"SEE ALSO\"", out);
+	for (size_t i = 0; i < nrefs; ++i)
+	{
+	    const CliDoc *ref = CDRoot_ref(root, i);
+	    fprintf(out, mdoc ? (i ? " ,\n.Xr %s %s" : "\n.Xr %s %s")
+		    : (i ? "\\fR,\n\\fB%s\\fP(%s)" : "\n\\fB%s\\fP(%s)"),
+		    CDMRef_name(ref), CDMRef_section(ref));
+	}
+    }
+
     const CliDoc *author = CDRoot_author(root);
     if (istext(author))
     {
