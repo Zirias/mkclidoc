@@ -356,6 +356,7 @@ static int write(FILE *out, const CliDoc *root, int cpp)
 
     int nflags = CDRoot_nflags(root);
     int nargs = CDRoot_nargs(root);
+    int separators = 0;
     int indent = 0;
     char flagstr[256];
 
@@ -377,6 +378,7 @@ static int write(FILE *out, const CliDoc *root, int cpp)
 		if (group < 0) group = 0;
 		if (group != i) continue;
 		if (CDFlag_arg(flag)) continue;
+		if (CDFlag_flag(flag) == '-') continue;
 		if (CDFlag_optional(flag) == 0)
 		{
 		    rnoarg[rnalen++] = CDFlag_flag(flag);
@@ -410,7 +412,16 @@ static int write(FILE *out, const CliDoc *root, int cpp)
 		if (group < 0) group = 0;
 		if (group != i) continue;
 		const char *arg = CDFlag_arg(flag);
-		if (!arg) continue;
+		if (!arg)
+		{
+		    if (CDFlag_flag(flag) == '-')
+		    {
+			++separators;
+			sprintf(flagstr, "--");
+			pos = writeUsageFlag(out, &ctx, pos, flagstr, 1);
+		    }
+		    continue;
+		}
 		size_t arglen = strlen(arg);
 		if (arglen > 80) err("argument too long");
 		if (arglen + 3 > (size_t)indent) indent = arglen + 3;
@@ -447,13 +458,14 @@ static int write(FILE *out, const CliDoc *root, int cpp)
     }
     else fputs ("\"\n}\n\nhelp() {\n  usage \"$1\"\n  echo \"", out);
 
-    if (nflags + nargs > 0)
+    if (nflags + nargs - separators > 0)
     {
 	indent += 2;
 	if (cpp) fputs(" \"", out);
 	for (i = 0; i < nflags; ++i)
 	{
 	    const CliDoc *flag = CDRoot_flag(root, i);
+	    if (CDFlag_flag(flag) == '-') continue;
 	    const char *arg = CDFlag_arg(flag);
 	    if (arg) sprintf(flagstr, "-%c %s", CDFlag_flag(flag), arg);
 	    else sprintf(flagstr, "-%c", CDFlag_flag(flag));

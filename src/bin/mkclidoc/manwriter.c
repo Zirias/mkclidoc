@@ -17,9 +17,10 @@ typedef struct Ctx
     const char *arg;
     size_t nflags;
     size_t nargs;
+    int separators;
     int mdoc;
 } Ctx;
-#define Ctx_init(root, mdoc) {(root), 0, 0, 0, 0, (mdoc)}
+#define Ctx_init(root, mdoc) {(root), 0, 0, 0, 0, 0, (mdoc)}
 
 #define err(m) do { \
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
@@ -282,6 +283,7 @@ static int writeManSynopsis(FILE *out, Ctx *ctx, const CliDoc *root)
 		if (group < 0) group = 0;
 		if (group != i) continue;
 		if (CDFlag_arg(flag)) continue;
+		if (CDFlag_flag(flag) == '-') continue;
 		if (CDFlag_optional(flag) == 0)
 		{
 		    rnoarg[rnalen++] = CDFlag_flag(flag);
@@ -313,7 +315,16 @@ static int writeManSynopsis(FILE *out, Ctx *ctx, const CliDoc *root)
 		if (group < 0) group = 0;
 		if (group != i) continue;
 		const char *arg = CDFlag_arg(flag);
-		if (!arg) continue;
+		if (!arg)
+		{
+		    if (CDFlag_flag(flag) == '-')
+		    {
+			++ctx->separators;
+			fputs(ctx->mdoc ?
+				"\n.Op Fl -" : "\n[\\fB\\-\\-\\fR]", out);
+		    }
+		    continue;
+		}
 		int optional = CDFlag_optional(flag);
 		if (optional == 0)
 		{
@@ -602,14 +613,15 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
     if (writeManDescription(out, &ctx,
 		CDRoot_description(root), 0) < 0) goto error;
 
-    if (ctx.nflags + ctx.nargs > 0)
+    if (ctx.nflags + ctx.nargs - ctx.separators > 0)
     {
 	fputs("\n.sp\nThe options are as follows:", out);
 	if (mdoc) fputs("\n.Bl -tag -width Ds", out);
 	for (size_t i = 0; i < ctx.nflags; ++i)
 	{
-	    if (!mdoc) fputs("\n.TP 8n", out);
 	    const CliDoc *flag = CDRoot_flag(root, i);
+	    if (CDFlag_flag(flag) == '-') continue;
+	    if (!mdoc) fputs("\n.TP 8n", out);
 	    const char *arg = CDFlag_arg(flag);
 	    if (arg)
 	    {
