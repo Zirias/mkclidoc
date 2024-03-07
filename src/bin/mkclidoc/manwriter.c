@@ -12,13 +12,14 @@
 
 typedef struct Ctx
 {
+    const CliDoc *root;
     const char *name;
     const char *arg;
     size_t nflags;
     size_t nargs;
     int mdoc;
 } Ctx;
-#define Ctx_init(mdoc) {0, 0, 0, 0, (mdoc)}
+#define Ctx_init(root, mdoc) {(root), 0, 0, 0, 0, (mdoc)}
 
 #define err(m) do { \
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
@@ -38,153 +39,109 @@ static char *strToUpper(const char *str)
     return strbuf;
 }
 
-static void mputc(FILE *out, int c)
+static char *fetchManTextWord(const char **s)
 {
-    fputc(c, out);
-    if (c == '\\') fputc(c, out);
-}
-
-static void mnputs(FILE *out, const char *s, size_t n)
-{
-    size_t i = 0;
-    size_t p = 0;
-    while (*s == ' ' || *s == '\t') ++s, --n;
-    while (!n || i < n)
+    size_t wordlen = 0;
+    while (**s && (**s == ' ' || **s == '\t')) ++(*s);
+    while (**s && **s != ' ' && **s != '\t' && **s != '.' && wordlen < 4096)
     {
-	size_t wl = 0;
-	size_t ol = 0;
-	size_t sl = 0;
-	const char *word = s;
-	while (*word == ' ' || *word == '\t') ++word, ++sl;
-	while (word[wl] && word[wl] != ' ' && word[wl] != '\t')
+	if (**s == '%')
 	{
-	    if (word[wl] == '\\') ++ol;
-	    ++wl, ++ol;
+	    if (!strcmp(*s, "%%name%%"))
+	    {
+		if (wordlen) break;
+		strcpy(strbuf, "%%name%%");
+		*s += sizeof "%%name%%" - 1;
+		return strbuf;
+	    }
+	    if (!strcmp(*s, "%%arg%%"))
+	    {
+		if (wordlen) break;
+		strcpy(strbuf, "%%arg%%");
+		*s += sizeof "%%arg%%" - 1;
+		return strbuf;
+	    }
 	}
-	if (!*word) break;
-	i += wl + sl;
-	if (n && i > n) wl -= (i - n);
-	if (p && p + ol > 78)
-	{
-	    fputc('\n', out);
-	    p = ol;
-	    while (wl--) mputc(out, *word++);
-	    s = word;
-	}
-	else
-	{
-	    wl += sl;
-	    p += ol + sl;
-	    while (wl--) mputc(out, *s++);
-	}
+	if (**s == '\\') strbuf[wordlen++] = '\\';
+	strbuf[wordlen++] = *(*s)++;
     }
-}
-
-static void mputs(FILE *out, const char *s)
-{
-    mnputs(out, s, 0);
+    if (!wordlen) return 0;
+    strbuf[wordlen] = 0;
+    return strbuf;
 }
 
 static void writeManText(FILE *out, Ctx *ctx, const char *str)
 {
-    const char *nmpos = 0;
-    const char *argpos = 0;
-    const char *period = 0;
-    int nl = 1;
-    for (;;)
+    size_t col = 0;
+    int oneword = 0;
+    while (*str)
     {
-	if (nmpos < str) nmpos = strstr(str, "%%name%%");
-	if (argpos < str) argpos = strstr(str, "%%arg%%");
-	if (period < str) period = strstr(str, ". ");
-	const char *endp = nmpos;
-	if (!endp || (argpos && argpos < endp)) endp = argpos;
-	if (!endp || (period && period < endp)) endp = period;
-	if (!endp)
+	int nl = 0;
+	if (*str == '.')
 	{
-	    mputs(out, str);
-	    break;
-	}
-	const char *wsp = endp;
-	if (endp != str)
-	{
-	    while (wsp > str && (wsp[-1] == ' ' || wsp[-1] == '\t')) --wsp;
-	    if (wsp != str)
-	    {
-		mnputs(out, str, wsp-str);
-		nl = 0;
-	    }
-	    if (wsp == endp) wsp = 0;
-	}
-	str = endp;
-	if (endp == period)
-	{
-	    if (wsp) mnputs(out, wsp, endp-wsp);
 	    fputc(*str++, out);
-	    fputc('\n', out);
 	    nl = 1;
-	    if (!*++str) break;
 	}
-	else if (endp == nmpos)
+
+	char *word = fetchManTextWord(&str);
+	if (!word) break;
+	int writename = !strcmp(word, "%%name%%");
+	int writearg = !strcmp(word, "%%arg%%") && ctx->arg;
+	if (writename || writearg)
 	{
-	    if (!nl) fputc('\n', out);
-	    if (ctx->mdoc) fputs(".Nm", out);
-	    else fprintf(out, "\\fB%s\\fR", ctx->name);
-	    str += 8;
-	    if (*str)
+	    if (col) fputc('\n', out);
+	    if (writename)
 	    {
-		if (*str != ' ')
-		{
-		    if (ctx->mdoc)
-		    {
-			if (*str != '.' && *str != ','
-				&& *str != ':' && *str != ';')
-			{
-			    fputs(" Ns No ", out);
-			}
-			else fputc(' ', out);
-		    }
-		    while (*str && *str != ' ')
-		    {
-			mputc(out, *str++);
-		    }
-		    if (*str) ++str;
-		}
-		else ++str;
+		if (ctx->mdoc) fputs(".Nm", out);
+		else fprintf(out, "\\fB%s\\fR", ctx->name);
 	    }
-	    if (!*str) break;
-	    fputc('\n', out);
-	    nl = 1;
+	    else if (writearg)
+	    {
+		fprintf(out, ctx->mdoc ? ".Ar %s" : "\\fI%s\\fR", ctx->arg);
+	    }
+	    if (ctx->mdoc)
+	    {
+		if (*str == '.' || *str == ',' || *str == ':' || *str == ';')
+		{
+		    fprintf(out, " %c\n", *str++);
+		}
+		else if (*str == ' ' || *str == '\t')
+		{
+		    fputc('\n', out);
+		    col = 0;
+		}
+		else
+		{
+		    fputs(" Ns ", out);
+		    oneword = 1;
+		}
+	    }
+	    else
+	    {
+		if (*str == ' ' || *str == '\t')
+		{
+		    fputc('\n', out);
+		    col = 0;
+		}
+		else oneword = 1;
+	    }
+	    continue;
 	}
-	else if (endp == argpos)
+	size_t wordlen = strlen(word);
+	if (nl || col + !!col + wordlen > 78)
 	{
-	    if (!nl) fputc('\n', out);
-	    fprintf(out, ctx->mdoc ? ".Ar %s" : "\\fI%s\\fR", ctx->arg);
-	    str += 7;
-	    if (*str)
-	    {
-		if (*str != ' ')
-		{
-		    if (ctx->mdoc)
-		    {
-			if (*str != '.' && *str != ','
-				&& *str != ':' && *str != ';')
-			{
-			    fputs(" Ns No ", out);
-			}
-			else fputc(' ', out);
-		    }
-		    while (*str && *str != ' ')
-		    {
-			mputc(out, *str++);
-		    }
-		    if (*str) ++str;
-		}
-		else ++str;
-	    }
-	    if (!*str) break;
 	    fputc('\n', out);
-	    nl = 1;
+	    col = 0;
+	    nl = 0;
 	}
+	if (col) ++col, fputc(' ', out);
+	fputs(word, out);
+	if (oneword)
+	{
+	    oneword = 0;
+	    col = 80;
+	}
+	else col += wordlen;
     }
 }
 
@@ -419,7 +376,7 @@ static int writeManDict(FILE *out, Ctx *ctx, const CliDoc *dict)
 	if (writeManDescription(out, ctx, val, 0) < 0) return -1;
     }
     if (ctx->mdoc) fputs("\n.El", out);
-    else fputs("\n.PD\n.PP\n.RE", out);
+    else fputs("\n.PD\n.RE", out);
     return 0;
 }
 
@@ -488,7 +445,7 @@ static int writeManArgDesc(FILE *out, Ctx *ctx, const CliDoc *arg)
 	    if (writeManDescription(out, ctx, def, 0) < 0) return -1;
 	}
 	if (ctx->mdoc) fputs("\n.El", out);
-	else fputs("\n.PD\n.PP\n.RE", out);
+	else fputs("\n.PD\n.RE", out);
     }
     return 0;
 }
@@ -497,7 +454,7 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 {
     assert(CliDoc_type(root) == CT_ROOT);
     
-    Ctx ctx = Ctx_init(mdoc);
+    Ctx ctx = Ctx_init(root, mdoc);
 
     const CliDoc *date = CDRoot_date(root);
     if (!date || CliDoc_type(date) != CT_DATE) err("missing date");
@@ -557,13 +514,13 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	    {
 		ctx.arg = arg;
 		fprintf(out, mdoc ? "\n.It Fl %c Ar %s"
-			: "\n\\fB\\-%c\\fR \\fI%s\\fR",
+			: "\n\\fB\\-%c\\fR \\fI%s\\fR\\ ",
 			CDFlag_flag(flag), arg);
 	    }
 	    else
 	    {
 		ctx.arg = 0;
-		fprintf(out, mdoc ? "\n.It Fl %c" : "\n\\fB\\-%c\\fR",
+		fprintf(out, mdoc ? "\n.It Fl %c" : "\n\\fB\\-%c\\fR\\ ",
 			CDFlag_flag(flag));
 	    }
 	    if (writeManArgDesc(out, &ctx, flag) < 0) goto error;
@@ -573,7 +530,7 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	    if (!mdoc) fputs("\n.TP 8n", out);
 	    const CliDoc *arg = CDRoot_arg(root, i);
 	    ctx.arg = CDArg_arg(arg);
-	    fprintf(out, mdoc ? "\n.It Ar %s" : "\n\\fI%s\\fR", ctx.arg);
+	    fprintf(out, mdoc ? "\n.It Ar %s" : "\n\\fI%s\\fR\\ ", ctx.arg);
 	    if (writeManArgDesc(out, &ctx, arg) < 0) goto error;
 	}
 	if (mdoc) fputs("\n.El", out);
@@ -597,17 +554,17 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	{
 	    if (mdoc) fputs("\n.It License:\n", out);
 	    else fputs("\n.TP 10n\nLicense:\n", out);
-	    mputs(out, CDText_str(license));
+	    writeManText(out, &ctx, CDText_str(license));
 	}
 	if (istext(www))
 	{
 	    if (mdoc) fputs("\n.It WWW:\n.Lk ", out);
 	    else fputs("\n.TP 10n\nWWW:\n\\fB", out);
-	    mputs(out, CDText_str(www));
+	    writeManText(out, &ctx, CDText_str(www));
 	    if (!mdoc) fputs("\\fR", out);
 	}
 	if (mdoc) fputs("\n.El", out);
-	else fputs("\n.PD\n.PP", out);
+	else fputs("\n.PD", out);
     }
 
     size_t nrefs = CDRoot_nrefs(root);
@@ -635,10 +592,10 @@ static int write(FILE *out, const CliDoc *root, int mdoc)
 	const char *ee = strchr(astr, '>');
 	if (es && ea && ee && es < ea && ea < ee)
 	{
-	    mnputs(out, astr, es-astr);
+	    fwrite(astr, 1, es-astr, out);
 	    if (mdoc) fputs(" Aq Mt ", out);
 	    else fputs("<\\fI", out);
-	    mnputs(out, es+1, ee-es-1);
+	    fwrite(es+1, 1, ee-es-1, out);
 	    if (!mdoc) fputs("\\fR>", out);
 	}
 	else fputs(astr, out);
