@@ -13,6 +13,7 @@ static const struct {
     writer writefunc;
 } writers[] = {
     { "cpp", writeCpp },
+    { "html", writeHtml },
     { "man", writeMan },
     { "mdoc", writeMdoc },
     { "sh", writeSh }
@@ -111,7 +112,7 @@ done:
     return rc;
 
 usage:
-    fprintf(stderr, "Usage: %s [-f <cpp|man|mdoc|sh>[,args]]"
+    fprintf(stderr, "Usage: %s [-f <cpp|html|man|mdoc|sh>[,args]]"
 	    "[-o outfile] [infile]\n", name);
     return EXIT_FAILURE;
 }
