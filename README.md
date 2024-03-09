@@ -2,21 +2,27 @@
 
 This is a very rudimentary tool to read a description of a command line
 utility in a simple text format and produce output in C preprocessor, shell
-script, troff/man or mandoc format. It only supports utilities using
+script, troff/man, mandoc or HTML format. It only supports utilities using
 single-letter flags preceded by a dash (POSIX style).
 
 ## Usage
 
-    Usage: mkclidoc [-f <cpp|man|mdoc|sh>[,args]] [-o outfile] [infile]
+    Usage: mkclidoc [-f <cpp|html|man|mdoc|sh>[,args[:args...]]]
+            [-o outfile] [infile]
 
 * `-f format,args`: Output format with optional format-specific args,
   defaults to `man`.
   - `cpp`: A set of C preprocessor macros to print usage and help messages
+  - `html`: A manpage in HTML format, using an embedded CSS style by default
+    * `html,style=file`: Embed the contents of `file` as the literal `<style>`
+      in the output
+    * `html,styleuri=uri`: Link to `uri` for CSS styling
   - `man`: A manpage in classic troff/man format
-  - `mdoc`: A manpage in (BSD) mandoc format
-    * `mdoc,os`: Override the mandoc `.Os` value with the tool name and
-      version
+  - `mdoc`: A manpage in (BSD) mdoc format
+    * `mdoc,os`: Override the mdoc `.Os` value with the tool name and version
   - `sh`: A shell script snippet defining usage() and help() functions
+    * `mdoc,t=file[:sub]`: Use `file` as a template, replacing `sub` with the
+      generated functions. `sub` defaults to `%%CLIDOC%%`
 * `-o outfile`: Optional output file, writes to `stdout` by default
 * `infile`: Optional input file, reads from `stdin` by default
 
@@ -35,7 +41,7 @@ A description for `mkclidoc` is a simple text format like in this example:
     %%name%% converts nonsense to other, much more beautiful nonsense.
     It also applies a green tint to it.
     .
-
+    manrefs: foobar frobrc.5
     defgroup: 1
 
     [flag g]
@@ -68,7 +74,7 @@ A description for `mkclidoc` is a simple text format like in this example:
     description:
     Frobnication mode, one of:
     - [foo:]: do some foo
-    - [bar:]: do some bar instead
+    - [bar:]: do some bar instead, using `foobar`
     .
     default: foo
 
@@ -76,6 +82,9 @@ A description for `mkclidoc` is a simple text format like in this example:
     description: frobnicate the file %%arg%%
     optional: 1
     default: frobnicate thin air
+
+    [file /usr/local/etc/frobrc]
+    description: The main configuration file for %%name%%
 
 This example shows all currently supported fields and elements.
 
@@ -91,7 +100,7 @@ following:
   flags and `1` for args.
 
 A text field can be given on the same line, or as a block starting on the next
-line and ended by a line containing a single perion (`.`).
+line and ended by a line containing a single period (`.`).
 
 In a text block, there can also be tables (at least 2 columns surrounded and
 separated by `|` characters) and item lists of the form `- [<key>]: <value>`.
@@ -100,6 +109,14 @@ found or on an empty line. As a special case, the value of an item can also be
 a table, which must then start on the next line after `- [<key>]:`.
 
 A blank line somewhere inside a text block starts a new paragraph.
+
+Text can contain elements treated specially when outputting in a manpage (man,
+mdoc or html) format:
+
+* `<link>`: If `link` contains `://`, it is rendered as an URL, otherwise, if
+  it contains `@`, it is rendered as an email address.
+* `` `ref` ``: If `ref` is a name mentioned in `manrefs` (without the section),
+  it is rendered as a cross-reference.
 
 ## Limitations
 
