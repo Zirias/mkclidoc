@@ -112,8 +112,8 @@ done:
     return rc;
 
 usage:
-    fprintf(stderr, "Usage: %s [-f <cpp|html|man|mdoc|sh>[,args]]"
-	    "[-o outfile] [infile]\n", name);
+    fprintf(stderr, "Usage: %s [-f <cpp|html|man|mdoc|sh>[,args[:args...]]]\n"
+	    "\t\t[-o outfile] [infile]\n", name);
     return EXIT_FAILURE;
 }
 

@@ -18,8 +18,23 @@ typedef enum Fmt
     F_HTML
 } Fmt;
 
+typedef struct FmtOpts
+{
+    union {
+	/* FMT_MDOC */
+	int os;
+
+	/* FMT_HTML */
+	struct {
+	    const char *style;
+	    const char *styleuri;
+	};
+    };
+} FmtOpts;
+
 typedef struct Ctx
 {
+    const FmtOpts *opts;
     const CliDoc *root;
     const char *name;
     const char *arg;
@@ -27,10 +42,9 @@ typedef struct Ctx
     size_t nargs;
     int separators;
     Fmt fmt;
-    int fmtflags;
 } Ctx;
-#define Ctx_init(root, mdoc, fmtflags) { \
-    (root), 0, 0, 0, 0, 0, (fmt), (fmtflags)}
+#define Ctx_init(root, mdoc, opts) { \
+    (opts), (root), 0, 0, 0, 0, 0, (fmt)}
 
 #define err(m) do { \
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
@@ -722,11 +736,11 @@ static int writeManArgDesc(FILE *out, Ctx *ctx, const CliDoc *arg)
     return 0;
 }
 
-static int write(FILE *out, const CliDoc *root, Fmt fmt, int flags)
+static int write(FILE *out, const CliDoc *root, Fmt fmt, const FmtOpts *opts)
 {
     assert(CliDoc_type(root) == CT_ROOT);
     
-    Ctx ctx = Ctx_init(root, fmt, flags);
+    Ctx ctx = Ctx_init(root, fmt, opts);
 
     const CliDoc *date = CDRoot_date(root);
     if (!date || CliDoc_type(date) != CT_DATE) err("missing date");
@@ -742,7 +756,10 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, int flags)
     if (fmt == F_HTML)
     {
 	const char *title = strToUpper(htmlescape(ctx.name));
-	fprintf(out, HTML_HEADER(title));
+	if (opts->style) fprintf(out, HTML_HEADER_STYLE(opts->style, title));
+	else if (opts->styleuri) fprintf(out,
+		HTML_HEADER_STYLEURI(htmlescape(opts->styleuri), title));
+	else fprintf(out, HTML_HEADER_STYLE(HTML_DEFAULT_STYLE, title));
 	fprintf(out, "<h2>NAME</h2>\n<dl class=\"name\">\n"
 		"<dt><span class=\"name\">%s</span> &ndash;</dt>\n"
 		"<dd>", htmlescape(ctx.name));
@@ -756,7 +773,7 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, int flags)
 		" %d, %d", tm->tm_mday, tm->tm_year + 1900);
 	fprintf(out, ".Dd %s", strbuf);
 	fprintf(out, "\n.Dt %s 1\n.Os", strToUpper(ctx.name));
-	if (flags)
+	if (opts->os)
 	{
 	    fprintf(out, " %s", ctx.name);
 	    if (istext(version)) fprintf(out, " %s", CDText_str(version));
@@ -1015,10 +1032,12 @@ int writeMan(FILE *out, const CliDoc *root, const char *args)
 
 int writeMdoc(FILE *out, const CliDoc *root, const char *args)
 {
-    int flags = 0;
+    FmtOpts opts;
+    memset(&opts, 0, sizeof opts);
+
     if (args)
     {
-	if (!strcmp(args, "os")) ++flags;
+	if (!strcmp(args, "os")) opts.os = 1;
 	else
 	{
 	    fprintf(stderr, "Unknown arguments for mdoc format: %s\n", args);
@@ -1027,16 +1046,101 @@ int writeMdoc(FILE *out, const CliDoc *root, const char *args)
 	    return -1;
 	}
     }
-    return write(out, root, F_MDOC, flags);
+    return write(out, root, F_MDOC, &opts);
+}
+
+static size_t parseOpt(char *buf, const char *argp, char **valp, char **nextp)
+{
+    size_t n;
+    for (n = 0, *valp = *nextp = 0; argp[n] && !*nextp; ++n)
+    {
+	switch (argp[n])
+	{
+	    case '\\':
+		if (!argp[n+1]) *buf++ = '\\';
+		else *buf++ = argp[++n];
+		break;
+	    case '=':
+		if (!*valp)
+		{
+		    *buf++ = 0;
+		    *valp = buf;
+		}
+		else *buf++ = '=';
+		break;
+	    case ':':
+		*buf++ = 0;
+		*nextp = buf;
+		break;
+	    default:
+		*buf++ = argp[n];
+	}
+    }
+    *buf = 0;
+    return n;
 }
 
 int writeHtml(FILE *out, const CliDoc *root, const char *args)
 {
+    FmtOpts opts;
+    memset(&opts, 0, sizeof opts);
+    char *optstr = 0;
+    char *style = 0;
+    FILE *css = 0;
+    int rc = -1;
+    char *valp;
+    char *nextp;
+
     if (args)
     {
-	fputs("The html format does not support any arguments.\n", stderr);
-	return -1;
+	size_t arglen = strlen(args);
+	optstr = xmalloc(arglen + 1);
+	const char *argp = args;
+	char *buf = optstr;
+	size_t len;
+	while (buf && (len = parseOpt(buf, argp, &valp, &nextp)))
+	{
+	    if (!valp) goto error;
+	    if (!strcmp(buf, "style"))
+	    {
+		css = fopen(valp, "r");
+		if (!css) goto styleerr;
+		size_t stylesz = 0;
+		for (;;)
+		{
+		    style = xrealloc(style, stylesz + 1024);
+		    size_t chunk = fread(style + stylesz, 1, 1024, css);
+		    stylesz += chunk;
+		    if (chunk < 1024) break;
+		}
+		if (ferror(css)) goto styleerr;
+		fclose(css);
+		css = 0;
+		style[stylesz] = 0;
+		opts.style = style;
+	    }
+	    else if (!strcmp(buf, "styleuri")) opts.styleuri = valp;
+	    else goto error;
+	    buf = nextp;
+	    argp += len;
+	}
     }
-    return write(out, root, F_HTML, 0);
+
+    rc = write(out, root, F_HTML, &opts);
+    goto done;
+
+styleerr:
+    fprintf(stderr, "Error reading %s\n", valp);
+    goto done;
+
+error:
+    fprintf(stderr, "Invalid arguments for html: %s\n", args);
+    fputs("Supported:  style=file, styleuri=uri\n",
+	    stderr);
+done:
+    if (css) fclose(css);
+    free(style);
+    free(optstr);
+    return rc;
 }
 

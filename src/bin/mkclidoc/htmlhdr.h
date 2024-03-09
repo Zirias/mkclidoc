@@ -1,8 +1,4 @@
-#define HTML_HEADER_FMT \
-"<!DOCTYPE HTML>\n" \
-"<html lang=\"en\">\n" \
-"  <head>\n" \
-"<style>\n" \
+#define HTML_DEFAULT_STYLE \
 "@media (prefers-color-scheme: dark) {\n" \
 "  :root {\n" \
 "    --bgcol: #2e2b28;\n" \
@@ -79,7 +75,7 @@
 "  padding-top: 0;\n" \
 "}\n" \
 "dd {\n" \
-"  width: 100%%;\n" \
+"  width: 100%;\n" \
 "}\n" \
 "dl.name, dl.synopsis {\n" \
 "  display: grid;\n" \
@@ -165,14 +161,14 @@
 "    position: absolute;\n" \
 "    right: initial;\n" \
 "    left: 40ch;\n" \
-"    transform: translateX(-50%%);\n" \
+"    transform: translateX(-50%);\n" \
 "    content: attr(data-man-sectionname);\n" \
 "  }\n" \
 "  h1:after {\n" \
 "    position: absolute;\n" \
 "    left: 80ch;\n" \
 "    margin-left: 0;\n" \
-"    transform: translateX(-100%%);\n" \
+"    transform: translateX(-100%);\n" \
 "    content: attr(data-man-title) \"(\" attr(data-man-section) \")\";\n" \
 "  }\n" \
 "  td { padding-right: 2ch; }\n" \
@@ -194,16 +190,29 @@
 "  dl.footer > dd {\n" \
 "    text-align: center;\n" \
 "  }\n" \
-"}\n" \
-"</style>\n" \
-"    <title>%s(1)</title>\n" \
-"    <meta name=\"viewport\" content=\"width=device-width\">\n" \
-"  </head>\n" \
-"  <body>\n" \
-"  <h1 data-man-title=\"%s\" data-man-section=\"1\"\n" \
-"      data-man-sectionname=\"General Commands Manual\">%s(1)</h1>\n"
+"}\n"
 
-#define HTML_HEADER_ARGS(title) (title),(title),(title)
+#define HTML_STYLE_START "<style>\n/* <![CDATA[ */\n"
+#define HTML_STYLE_END "/* ]]> */\n</style>\n"
+#define HTML_STYLEURI_START "<link rel=\"stylesheet\" href=\""
+#define HTML_STYLEURI_END "\">\n"
 
-#define HTML_HEADER(title) HTML_HEADER_FMT,HTML_HEADER_ARGS(title)
+#define HTML_HEADER_FMT \
+"<!DOCTYPE HTML>\n" \
+"<html lang=\"en\">\n" \
+"<head>\n" \
+"%s%s%s" \
+"<title>%s(1)</title>\n" \
+"<meta name=\"viewport\" content=\"width=device-width\">\n" \
+"</head>\n" \
+"<body>\n" \
+"<h1 data-man-title=\"%s\" data-man-section=\"1\" " \
+"data-man-sectionname=\"General Commands Manual\">%s(1)</h1>\n"
 
+#define HTML_HEADER_STYLE(style, title) \
+    HTML_HEADER_FMT, HTML_STYLE_START, (style), HTML_STYLE_END, \
+    (title), (title), (title)
+
+#define HTML_HEADER_STYLEURI(uri, title) \
+    HTML_HEADER_FMT, HTML_STYLEURI_START, (uri), HTML_STYLEURI_END, \
+    (title), (title), (title)
