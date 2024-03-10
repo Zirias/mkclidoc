@@ -427,6 +427,28 @@ static int writeManSynopsis(FILE *out, Ctx *ctx, const CliDoc *root)
 	    for (size_t j = 0; j < ctx->nflags; ++j)
 	    {
 		const CliDoc *flag = CDRoot_flag(root, j);
+		if (CDFlag_optional(flag)) continue;
+		int group = CDFlag_group(flag);
+		if (group < 0) group = defgroup;
+		if (group < 0) group = 0;
+		if (group != i) continue;
+		const char *arg = CDFlag_arg(flag);
+		if (!arg) continue;
+		if (ctx->fmt == F_HTML)
+		{
+		    fprintf(out, "<span class=\"flag\">-%c</span>"
+			    "&nbsp;<span class=\"arg\">%s</span>\n",
+			    CDFlag_flag(flag), arg);
+		}
+		else fprintf(out, ctx->fmt == F_MDOC ? "\n.Fl %c Ar %s"
+			: "\n\\fB\\-%c\\fR\\ \\fI%s\\fR",
+			CDFlag_flag(flag), arg);
+		++n;
+	    }
+	    for (size_t j = 0; j < ctx->nflags; ++j)
+	    {
+		const CliDoc *flag = CDRoot_flag(root, j);
+		if (!CDFlag_optional(flag)) continue;
 		int group = CDFlag_group(flag);
 		if (group < 0) group = defgroup;
 		if (group < 0) group = 0;
@@ -445,61 +467,49 @@ static int writeManSynopsis(FILE *out, Ctx *ctx, const CliDoc *root)
 		    }
 		    continue;
 		}
-		int optional = CDFlag_optional(flag);
-		if (optional == 0)
+		if (ctx->fmt == F_HTML)
 		{
-		    if (ctx->fmt == F_HTML)
-		    {
-			fprintf(out, "<span class=\"flag\">-%c</span>"
-				"&nbsp;<span class=\"arg\">%s</span>\n",
-				CDFlag_flag(flag), arg);
-		    }
-		    else fprintf(out, ctx->fmt == F_MDOC ? "\n.Fl %c Ar %s"
-			    : "\n\\fB\\-%c\\fR\\ \\fI%s\\fR",
+		    fprintf(out, "[<span class=\"flag\">-%c</span>"
+			    "&nbsp;<span class=\"arg\">%s</span>]\n",
 			    CDFlag_flag(flag), arg);
 		}
-		else
-		{
-		    if (ctx->fmt == F_HTML)
-		    {
-			fprintf(out, "[<span class=\"flag\">-%c</span>"
-				"&nbsp;<span class=\"arg\">%s</span>]\n",
-				CDFlag_flag(flag), arg);
-		    }
-		    else fprintf(out, ctx->fmt == F_MDOC ? "\n.Op Fl %c Ar %s"
-			    : "\n[\\fB\\-%c\\fR\\ \\fI%s\\fR]",
-			    CDFlag_flag(flag), arg);
-		}
+		else fprintf(out, ctx->fmt == F_MDOC ? "\n.Op Fl %c Ar %s"
+			: "\n[\\fB\\-%c\\fR\\ \\fI%s\\fR]",
+			CDFlag_flag(flag), arg);
 		++n;
 	    }
 	    for (size_t j = 0; j < ctx->nargs; ++j)
 	    {
 		const CliDoc *arg = CDRoot_arg(root, j);
+		if (CDArg_optional(arg)) continue;
 		int group = CDArg_group(arg);
 		if (group < 0) group = defgroup;
 		if (group < 0) group = 0;
 		if (group != i) continue;
-		int optional = CDArg_optional(arg);
-		if (optional == 1)
+		if (ctx->fmt == F_HTML)
 		{
-		    if (ctx->fmt == F_HTML)
-		    {
-			fprintf(out, "[<span class=\"arg\">%s</span>]\n",
-				CDArg_arg(arg));
-		    }
-		    else fprintf(out, ctx->fmt == F_MDOC ? "\n.Op Ar %s"
-			    : "\n[\\fI%s\\fR]", CDArg_arg(arg));
+		    fprintf(out, "<span class=\"arg\">%s</span>\n",
+			    CDArg_arg(arg));
 		}
-		else
+		else fprintf(out, ctx->fmt == F_MDOC ? "\n.Ar %s"
+			: "\n\\fI%s\\fR", CDArg_arg(arg));
+		++n;
+	    }
+	    for (size_t j = 0; j < ctx->nargs; ++j)
+	    {
+		const CliDoc *arg = CDRoot_arg(root, j);
+		if (!CDArg_optional(arg)) continue;
+		int group = CDArg_group(arg);
+		if (group < 0) group = defgroup;
+		if (group < 0) group = 0;
+		if (group != i) continue;
+		if (ctx->fmt == F_HTML)
 		{
-		    if (ctx->fmt == F_HTML)
-		    {
-			fprintf(out, "<span class=\"arg\">%s</span>\n",
-				CDArg_arg(arg));
-		    }
-		    else fprintf(out, ctx->fmt == F_MDOC ? "\n.Ar %s"
-			    : "\n\\fI%s\\fR", CDArg_arg(arg));
+		    fprintf(out, "[<span class=\"arg\">%s</span>]\n",
+			    CDArg_arg(arg));
 		}
+		else fprintf(out, ctx->fmt == F_MDOC ? "\n.Op Ar %s"
+			: "\n[\\fI%s\\fR]", CDArg_arg(arg));
 		++n;
 	    }
 	    if (ctx->fmt == F_HTML) fputs("</dd>\n", out);
