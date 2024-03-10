@@ -407,6 +407,23 @@ static int write(FILE *out, const CliDoc *root, int cpp)
 	    for (int j = 0; j < nflags; ++j)
 	    {
 		const CliDoc *flag = CDRoot_flag(root, j);
+		if (CDFlag_optional(flag)) continue;
+		int group = CDFlag_group(flag);
+		if (group < 0) group = defgroup;
+		if (group < 0) group = 0;
+		if (group != i) continue;
+		const char *arg = CDFlag_arg(flag);
+		if (!arg) continue;
+		size_t arglen = strlen(arg);
+		if (arglen > 80) err("argument too long");
+		if (arglen + 3 > (size_t)indent) indent = arglen + 3;
+		sprintf(flagstr, "-%c %s", CDFlag_flag(flag), arg);
+		pos = writeUsageFlag(out, &ctx, pos, flagstr, 0);
+	    }
+	    for (int j = 0; j < nflags; ++j)
+	    {
+		const CliDoc *flag = CDRoot_flag(root, j);
+		if (!CDFlag_optional(flag)) continue;
 		int group = CDFlag_group(flag);
 		if (group < 0) group = defgroup;
 		if (group < 0) group = 0;
@@ -425,13 +442,13 @@ static int write(FILE *out, const CliDoc *root, int cpp)
 		size_t arglen = strlen(arg);
 		if (arglen > 80) err("argument too long");
 		if (arglen + 3 > (size_t)indent) indent = arglen + 3;
-		int optional = CDFlag_optional(flag);
 		sprintf(flagstr, "-%c %s", CDFlag_flag(flag), arg);
-		pos = writeUsageFlag(out, &ctx, pos, flagstr, optional);
+		pos = writeUsageFlag(out, &ctx, pos, flagstr, 1);
 	    }
 	    for (int j = 0; j < nargs; ++j)
 	    {
 		const CliDoc *arg = CDRoot_arg(root, j);
+		if (CDArg_optional(arg)) continue;
 		int group = CDArg_group(arg);
 		if (group < 0) group = defgroup;
 		if (group < 0) group = 0;
@@ -440,8 +457,21 @@ static int write(FILE *out, const CliDoc *root, int cpp)
 		size_t arglen = strlen(argstr);
 		if (arglen > 80) err("argument too long");
 		if (arglen > (size_t)indent) indent = arglen;
-		int optional = CDArg_optional(arg);
-		pos = writeUsageFlag(out, &ctx, pos, argstr, optional);
+		pos = writeUsageFlag(out, &ctx, pos, argstr, 0);
+	    }
+	    for (int j = 0; j < nargs; ++j)
+	    {
+		const CliDoc *arg = CDRoot_arg(root, j);
+		if (!CDArg_optional(arg)) continue;
+		int group = CDArg_group(arg);
+		if (group < 0) group = defgroup;
+		if (group < 0) group = 0;
+		if (group != i) continue;
+		const char *argstr = CDArg_arg(arg);
+		size_t arglen = strlen(argstr);
+		if (arglen > 80) err("argument too long");
+		if (arglen > (size_t)indent) indent = arglen;
+		pos = writeUsageFlag(out, &ctx, pos, argstr, 1);
 	    }
 	}
     }
