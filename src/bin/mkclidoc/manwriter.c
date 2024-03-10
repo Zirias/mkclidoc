@@ -673,7 +673,6 @@ static int writeManDescription(FILE *out, Ctx *ctx,
 	    break;
 
 	case CT_TABLE:
-	    if (idx && ctx->fmt != F_HTML) fputs("\n.sp", out);
 	    writeManTable(out, ctx, desc);
 	    break;
 

@@ -67,6 +67,9 @@
 "td:last-child {\n" \
 "  padding-right: 0;\n" \
 "}\n" \
+"p + table {\n" \
+"  margin-top: 1em;\n" \
+"}\n" \
 "dl {\n" \
 "  clear: left;\n" \
 "  padding-top: 1em;\n" \
