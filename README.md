@@ -44,6 +44,10 @@ A description for `mkclidoc` is a simple text format like in this example:
     manrefs: foobar frobrc.5
     defgroup: 1
 
+    [flag G]
+    description: lighter green
+    default: mild green
+
     [flag g]
     description: stronger green
     default: mild green
@@ -86,6 +90,12 @@ A description for `mkclidoc` is a simple text format like in this example:
     [file /usr/local/etc/frobrc]
     description: The main configuration file for %%name%%
 
+    [var GREEN]
+    description: Overrides the default green generator
+
+    [var GREENOPTS]
+    description: Extra arguments for the green generator
+
 This example shows all currently supported fields and elements.
 
 A field starts with `<name>:`. Most fields just contain any text, except the
@@ -123,9 +133,11 @@ Here's what the example above looks like rendered as help text (`cpp` and
 `sh`):
 
     Usage: frob -h
-           frob [-g] [-i intensity] -k kind [-m mode]
+           frob [-Gg] -k kind [-i intensity] [-m mode]
                 [filename]
 
+        -G            lighter green
+                      default: mild green
         -g            stronger green
                       default: mild green
         -h            print a help text and exit

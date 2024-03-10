@@ -1,4 +1,4 @@
-<svg width="720px" height="1100px" xmlns="http://www.w3.org/2000/svg">
+<svg width="720px" height="1240px" xmlns="http://www.w3.org/2000/svg">
 <style>
 /* <![CDATA[ */
 :root {
@@ -75,20 +75,23 @@ h2 + dl, h3 + dl {
 dd {
   width: 100%;
 }
-dl.name, dl.synopsis {
+dl.name, dl.synopsis, dl.meta, dl.environment {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0;
 }
-dl.name dt, dl.synopsis dt, dl.meta dt {
+dl.name dt, dl.synopsis dt, dl.meta dt, dl.environment dt {
   grid-column: 1;
   margin-right: 1ch;
+}
+dl.environment dt {
+  margin-right: 2ch;
 }
 dl.synopsis dt {
   font-weight: bold;
   color: var(--strongcol);
 }
-dl.name dd, dl.synopsis dd, dl.meta dd {
+dl.name dd, dl.synopsis dd, dl.meta dd, dl.environment dd {
   grid-column: 2;
 }
 dl.description {
@@ -105,7 +108,14 @@ dl.description > dd {
   margin-top: 1em;
   float: left;
 }
+dl.environment > dt {
+  margin-top: 1em;
+}
+dl.environment > dd {
+  margin-top: 1em;
+}
 dl.description > dt:first-child, dl.description > dt:first-child + dd,
+dl.environment > dt:first-child, dl.environment > dt:first-child + dd,
 dl dl.description dt, dl dl.description dd {
   margin-top: 0;
   margin-bottom: 0;
@@ -115,11 +125,6 @@ dl.description dd:has(> table) {
 }
 dl dd p:first-child {
   margin-top: 0;
-}
-dl.meta {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0;
 }
 dl.footer {
   margin-left: -3ch;
@@ -207,9 +212,9 @@ span.arg, span.file {
 </dd>
 <dt>frob</dt>
 <dd>
-[<span class="flag">-g</span>]
-[<span class="flag">-i</span>&#160;<span class="arg">intensity</span>]
+[<span class="flag">-Gg</span>]
 <span class="flag">-k</span>&#160;<span class="arg">kind</span>
+[<span class="flag">-i</span>&#160;<span class="arg">intensity</span>]
 [<span class="flag">-m</span>&#160;<span class="arg">mode</span>]
 [<span class="arg">filename</span>]
 </dd>
@@ -219,30 +224,6 @@ span.arg, span.file {
 converts nonsense to other, much more beautiful nonsense. It also applies a green tint to it.</p>
 <p>The options are as follows:</p>
 <dl class="description">
-<dt><span class="flag">-g</span></dt>
-<dd>
-<p>stronger green</p>
-<dl class="meta">
-<dt>default:</dt><dd><p>mild green</p>
-</dd>
-</dl>
-</dd>
-<dt><span class="flag">-h</span></dt>
-<dd>
-<p>print a help text and exit</p>
-</dd>
-<dt><span class="flag">-i</span>&#160;<span class="arg">intensity</span></dt>
-<dd>
-<p>how hard to try</p>
-<dl class="meta">
-<dt>min:</dt><dd><p>0 (not at all)</p>
-</dd>
-<dt>max:</dt><dd><p>100 (full power)</p>
-</dd>
-<dt>default:</dt><dd><p>50</p>
-</dd>
-</dl>
-</dd>
 <dt><span class="flag">-k</span>&#160;<span class="arg">kind</span></dt>
 <dd>
 <p><span class="arg">kind</span>
@@ -290,6 +271,38 @@ yes</td>
 </tr>
 </table>
 </dd>
+<dt><span class="flag">-G</span></dt>
+<dd>
+<p>lighter green</p>
+<dl class="meta">
+<dt>default:</dt><dd><p>mild green</p>
+</dd>
+</dl>
+</dd>
+<dt><span class="flag">-g</span></dt>
+<dd>
+<p>stronger green</p>
+<dl class="meta">
+<dt>default:</dt><dd><p>mild green</p>
+</dd>
+</dl>
+</dd>
+<dt><span class="flag">-h</span></dt>
+<dd>
+<p>print a help text and exit</p>
+</dd>
+<dt><span class="flag">-i</span>&#160;<span class="arg">intensity</span></dt>
+<dd>
+<p>how hard to try</p>
+<dl class="meta">
+<dt>min:</dt><dd><p>0 (not at all)</p>
+</dd>
+<dt>max:</dt><dd><p>100 (full power)</p>
+</dd>
+<dt>default:</dt><dd><p>50</p>
+</dd>
+</dl>
+</dd>
 <dt><span class="flag">-m</span>&#160;<span class="arg">mode</span></dt>
 <dd>
 <p>Frobnication mode, one of:</p>
@@ -323,6 +336,17 @@ yes</td>
 <dd><span class="name">frob</span> 1.0</dd>
 <dt>License:</dt><dd>BSD</dd>
 <dt>WWW:</dt><dd><a href="https://example.com/frob">https://example.com/frob</a></dd>
+</dl>
+<h2>ENVIRONMENT</h2>
+<dl class="environment">
+<dt><span class="name">GREEN</span></dt>
+<dd>
+<p>Overrides the default green generator</p>
+</dd>
+<dt><span class="name">GREENOPTS</span></dt>
+<dd>
+<p>Extra arguments for the green generator</p>
+</dd>
 </dl>
 <h2>FILES</h2>
 <dl class="description">
