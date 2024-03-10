@@ -42,9 +42,11 @@ struct CDRoot
     CDFlag **flags;
     CDArg **args;
     CDNamed **files;
+    CDNamed **vars;
     size_t nflags;
     size_t nargs;
     size_t nfiles;
+    size_t nvars;
     int defgroup;
 };
 
@@ -137,6 +139,7 @@ static int parsenamedvals(Parser *p, CDNamed *named);
 static int parseflag(Parser *p, CDRoot *root);
 static int parsearg(Parser *p, CDRoot *root);
 static int parsefile(Parser *p, CDRoot *root);
+static int parsevar(Parser *p, CDRoot *root);
 static int parse(CDRoot *root, FILE *doc);
 
 #define isws(c) (c == ' ' || c == '\t')
@@ -739,6 +742,34 @@ error:
     return -1;
 }
 
+static int parsevar(Parser *p, CDRoot *root)
+{
+    char *tmp = strchr(p->line, '\n');
+    if (!tmp) err("Expected end of line");
+    skipwsb(tmp);
+    --tmp;
+    if (tmp <= p->line) err("Unexpected end of line");
+    if (*tmp != ']') err("Tag not closed");
+    skipws(p->line);
+    if (p->line == tmp) err("Missing var name");
+    CDNamed *var = xmalloc(sizeof *var);
+    memset(var, 0, sizeof *var);
+    var->base.parent = (CliDoc *)root;
+    var->base.type = CT_NAMED;
+    root->vars = xrealloc(root->vars,
+	    (root->nvars+1) * sizeof *root->vars);
+    root->vars[root->nvars++] = var;
+    size_t varlen = tmp - p->line;
+    var->name = xmalloc(varlen + 1);
+    strncpy(var->name, p->line, varlen);
+    var->name[varlen] = 0;
+    p->line = 0;
+    return parsenamedvals(p, var);
+
+error:
+    return -1;
+}
+
 static int parse(CDRoot *root, FILE *doc)
 {
     Parser parser = { doc, 0, 0, {0} };
@@ -775,6 +806,11 @@ static int parse(CDRoot *root, FILE *doc)
 	    {
 		p->line += 6;
 		if (parsefile(p, root) < 0) goto error;
+	    }
+	    else if (!strncmp(p->line+1, "var ", 4))
+	    {
+		p->line += 5;
+		if (parsevar(p, root) < 0) goto error;
 	    }
 	    else err("Unknown tag");
 	    continue;
@@ -930,6 +966,18 @@ const CliDoc *CDRoot_file(const CliDoc *self, size_t i)
 {
     assert(i < CDRoot_nfiles(self));
     return (const CliDoc *)((const CDRoot *)self)->files[i];
+}
+
+size_t CDRoot_nvars(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->nvars;
+}
+
+const CliDoc *CDRoot_var(const CliDoc *self, size_t i)
+{
+    assert(i < CDRoot_nfiles(self));
+    return (const CliDoc *)((const CDRoot *)self)->vars[i];
 }
 
 size_t CDRoot_nrefs(const CliDoc *self)
@@ -1182,6 +1230,14 @@ static void CDRoot_destroy(CliDoc *self)
 	    CliDoc_destroy((CliDoc *)root->files[i]);
 	}
 	free(root->files);
+    }
+    if (root->nvars)
+    {
+	for (size_t i = 0; i < root->nvars; ++i)
+	{
+	    CliDoc_destroy((CliDoc *)root->vars[i]);
+	}
+	free(root->vars);
     }
 }
 
