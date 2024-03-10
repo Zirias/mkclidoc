@@ -118,6 +118,37 @@ mdoc or html) format:
 * `` `ref` ``: If `ref` is a name mentioned in `manrefs` (without the section),
   it is rendered as a cross-reference.
 
+### Rendered example
+Here's what the example above looks like rendered as help text (`cpp` and
+`sh`):
+
+    Usage: frob -h
+           frob [-g] [-i intensity] -k kind [-m mode]
+                [filename]
+
+        -g            stronger green
+                      default: mild green
+        -h            print a help text and exit
+        -i intensity  how hard to try
+                      min: 0 (not at all), max: 100 (full power), default: 50
+        -k kind       kind specifies the kind of nonsense.
+                      kind    description          dangerous
+                      --      --                   --
+                      fun     funny nonsense       no
+                      cringe  unsettling nonsense  no
+                      psych   horrible nonsense    yes
+        -m mode       Frobnication mode, one of:
+                      foo:  do some foo
+                      bar:  do some bar instead, using `foobar`
+                      default: foo
+        filename      frobnicate the file filename
+                      default: frobnicate thin air
+
+... and as a manpage (`html`, `man` and `mdoc`, here html with default style
+in desktop width and "dark mode"):
+
+![FROB(1)](.github/assets/example.svg?raw=true)
+
 ## Limitations
 
 Manpage output is only rudimentarily escaped, so you might easily find edge
