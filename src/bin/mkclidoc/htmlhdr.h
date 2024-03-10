@@ -80,20 +80,23 @@
 "dd {\n" \
 "  width: 100%;\n" \
 "}\n" \
-"dl.name, dl.synopsis {\n" \
+"dl.name, dl.synopsis, dl.meta, dl.environment {\n" \
 "  display: grid;\n" \
 "  grid-template-columns: auto 1fr;\n" \
 "  gap: 0;\n" \
 "}\n" \
-"dl.name dt, dl.synopsis dt, dl.meta dt {\n" \
+"dl.name dt, dl.synopsis dt, dl.meta dt, dl.environment dt {\n" \
 "  grid-column: 1;\n" \
 "  margin-right: 1ch;\n" \
+"}\n" \
+"dl.environment dt {\n" \
+"  margin-right: 2ch;\n" \
 "}\n" \
 "dl.synopsis dt {\n" \
 "  font-weight: bold;\n" \
 "  color: var(--strongcol);\n" \
 "}\n" \
-"dl.name dd, dl.synopsis dd, dl.meta dd {\n" \
+"dl.name dd, dl.synopsis dd, dl.meta dd, dl.environment dd {\n" \
 "  grid-column: 2;\n" \
 "}\n" \
 "dl.description {\n" \
@@ -110,7 +113,14 @@
 "  margin-top: 1em;\n" \
 "  float: left;\n" \
 "}\n" \
+"dl.environment > dt {\n" \
+"  margin-top: 1em;\n" \
+"}\n" \
+"dl.environment > dd {\n" \
+"  margin-top: 1em;\n" \
+"}\n" \
 "dl.description > dt:first-child, dl.description > dt:first-child + dd,\n" \
+"dl.environment > dt:first-child, dl.environment > dt:first-child + dd,\n" \
 "dl dl.description dt, dl dl.description dd {\n" \
 "  margin-top: 0;\n" \
 "  margin-bottom: 0;\n" \
@@ -120,11 +130,6 @@
 "}\n" \
 "dl dd p:first-child {\n" \
 "  margin-top: 0;\n" \
-"}\n" \
-"dl.meta {\n" \
-"  display: grid;\n" \
-"  grid-template-columns: auto 1fr;\n" \
-"  gap: 0;\n" \
 "}\n" \
 "dl.footer {\n" \
 "  margin-left: -3ch;\n" \

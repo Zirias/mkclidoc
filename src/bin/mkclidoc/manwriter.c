@@ -908,6 +908,61 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, const FmtOpts *opts)
 	else fputs("\n.PD", out);
     }
 
+    size_t nvars = CDRoot_nvars(root);
+    if (nvars)
+    {
+	struct {
+	    const char *tag;
+	    size_t tagwidth;
+	} wspec = {0, 0};
+
+	if (fmt != F_HTML)
+	{
+	    for (size_t i = 0; i < nvars; ++i)
+	    {
+		const CliDoc *var = CDRoot_var(root, i);
+		const char *vname = CDNamed_name(var);
+		size_t namelen = strlen(vname);
+		if (namelen > wspec.tagwidth)
+		{
+		    wspec.tag = vname;
+		    wspec.tagwidth = namelen;
+		}
+	    }
+	    wspec.tagwidth += 2;
+	}
+
+	if (fmt == F_HTML)
+	{
+	    fputs("<h2>ENVIRONMENT</h2>\n<dl class=\"environment\">\n", out);
+	}
+	else if (fmt == F_MDOC)
+	{
+	    fprintf(out, "\n.Sh ENVIRONMENT\n.Bl -tag -width \"%s\"",
+		    wspec.tag);
+	}
+	else fputs("\n.SH \"ENVIRONMENT\"", out);
+	for (size_t i = 0; i < nvars; ++i)
+	{
+	    if (fmt == F_MAN) fprintf(out, "\n.TP %un",
+		    (unsigned)wspec.tagwidth);
+	    const CliDoc *var = CDRoot_var(root, i);
+	    if (fmt == F_HTML)
+	    {
+		fprintf(out,
+			"<dt><span class=\"name\">%s</span></dt>\n<dd>\n",
+			htmlescape(CDNamed_name(var)));
+	    }
+	    else fprintf(out, fmt == F_MDOC ? "\n.It Ev %s" : "\n\\fB%s\\fR",
+		    CDNamed_name(var));
+	    if (writeManDescription(out, &ctx,
+			CDNamed_description(var), 0) < 0) goto error;
+	    if (fmt == F_HTML) fputs("</dd>\n", out);
+	}
+	if (fmt == F_HTML) fputs("</dl>\n", out);
+	if (fmt == F_MDOC) fputs("\n.El", out);
+    }
+
     size_t nfiles = CDRoot_nfiles(root);
     if (nfiles)
     {
