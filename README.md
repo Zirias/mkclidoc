@@ -108,6 +108,9 @@ following:
   mentioned first.
 * `optional` is a boolean flag and must be `0` or `1`. It defaults to `0` for
   flags and `1` for args.
+* `manrefs` is a list of references to other manpages for output in a manpage
+  format. Each entry is of the form `name.section`. If the section part is
+  omitted, it defaults to `1`.
 
 A text field can be given on the same line, or as a block starting on the next
 line and ended by a line containing a single period (`.`).
@@ -126,7 +129,9 @@ mdoc or html) format:
 * `<link>`: If `link` contains `://`, it is rendered as an URL, otherwise, if
   it contains `@`, it is rendered as an email address.
 * `` `ref` ``: If `ref` is a name mentioned in `manrefs` (without the section),
-  it is rendered as a cross-reference.
+  it is rendered as a cross-reference. To render cross-references without
+  adding them to the references shown in `SEE ALSO`, they can be added to
+  `manrefs` with a `&` prepended.
 
 ### Rendered example
 Here's what the example above looks like rendered as help text (`cpp` and

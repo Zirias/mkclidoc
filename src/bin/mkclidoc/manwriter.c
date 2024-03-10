@@ -238,10 +238,13 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	if (word[0] == '`' && word[wordlen-1] == '`')
 	{
 	    const CliDoc *ref = 0;
+	    const char *refname = 0;
 	    for (size_t i = 0; i < CDRoot_nrefs(ctx->root); ++i)
 	    {
 		const CliDoc *r = CDRoot_ref(ctx->root, i);
-		if (!strncmp(CDMRef_name(r), word+1, wordlen-2))
+		refname = CDMRef_name(r);
+		if (*refname == '&') ++refname;
+		if (!strncmp(refname, word+1, wordlen-2))
 		{
 		    ref = r;
 		    break;
@@ -253,11 +256,11 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		if (ctx->fmt == F_HTML)
 		{
 		    fprintf(out, "<span class=\"name\">%s</span>(%s)",
-			    CDMRef_name(ref), CDMRef_section(ref));
+			    refname, CDMRef_section(ref));
 		}
 		else fprintf(out, ctx->fmt == F_MDOC
 			? ".Xr %s %s" : "\\fB%s\\fP(%s)\\fR",
-			CDMRef_name(ref), CDMRef_section(ref));
+			refname, CDMRef_section(ref));
 		if (ctx->fmt == F_MDOC)
 		{
 		    if (ismpunct(*str))
@@ -1008,25 +1011,38 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, const FmtOpts *opts)
     size_t nrefs = CDRoot_nrefs(root);
     if (nrefs)
     {
-	if (fmt == F_HTML) fputs("<h2>SEE ALSO</h2>\n<p>", out);
-	else if (fmt == F_MDOC) fputs("\n.Sh SEE ALSO", out);
-	else fputs("\n.SH \"SEE ALSO\"", out);
+	int haverefs = 0;
 	for (size_t i = 0; i < nrefs; ++i)
 	{
-	    const CliDoc *ref = CDRoot_ref(root, i);
-	    if (fmt == F_HTML)
+	    if (*CDMRef_name(CDRoot_ref(root, i)) != '&')
 	    {
-		if (i) fputs(", ", out);
-		fprintf(out, "<span class=\"name\">%s</span>",
-		    htmlescape(CDMRef_name(ref)));
-		fprintf(out, "(%s)", htmlescape(CDMRef_section(ref)));
+		haverefs = 1;
+		break;
 	    }
-	    else fprintf(out, fmt == F_MDOC
-		    ? (i ? " ,\n.Xr %s %s" : "\n.Xr %s %s")
-		    : (i ? "\\fR,\n\\fB%s\\fP(%s)" : "\n\\fB%s\\fP(%s)"),
-		    CDMRef_name(ref), CDMRef_section(ref));
 	}
-	if (fmt == F_HTML) fputs("</p>\n", out);
+	if (haverefs)
+	{
+	    if (fmt == F_HTML) fputs("<h2>SEE ALSO</h2>\n<p>", out);
+	    else if (fmt == F_MDOC) fputs("\n.Sh SEE ALSO", out);
+	    else fputs("\n.SH \"SEE ALSO\"", out);
+	    for (size_t i = 0; i < nrefs; ++i)
+	    {
+		const CliDoc *ref = CDRoot_ref(root, i);
+		if (*CDMRef_name(ref) == '&') continue;
+		if (fmt == F_HTML)
+		{
+		    if (i) fputs(", ", out);
+		    fprintf(out, "<span class=\"name\">%s</span>",
+			htmlescape(CDMRef_name(ref)));
+		    fprintf(out, "(%s)", htmlescape(CDMRef_section(ref)));
+		}
+		else fprintf(out, fmt == F_MDOC
+			? (i ? " ,\n.Xr %s %s" : "\n.Xr %s %s")
+			: (i ? "\\fR,\n\\fB%s\\fP(%s)" : "\n\\fB%s\\fP(%s)"),
+			CDMRef_name(ref), CDMRef_section(ref));
+	    }
+	    if (fmt == F_HTML) fputs("</p>\n", out);
+	}
     }
 
     const CliDoc *author = CDRoot_author(root);
