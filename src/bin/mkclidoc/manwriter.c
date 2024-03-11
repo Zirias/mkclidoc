@@ -133,19 +133,18 @@ static char *mdocargescape(const char *str)
 
 static int isenvname(const char *str)
 {
-    if (!str[1]) return 0;
     int haveupper = 0;
     for (;*str; ++str)
     {
 	if (isupper(*str))
 	{
-	    haveupper = 1;
+	    ++haveupper;
 	    continue;
 	}
 	if (haveupper && isdigit(*str)) continue;
 	if (*str != '_') return 0;
     }
-    return haveupper;
+    return haveupper > 1;
 }
 
 static char *fetchManTextWord(const char **s, const Ctx *ctx)
@@ -257,8 +256,12 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	int writevar = !strcmp(word, "%%var%%") && ctx->var;
 	if (writename || writearg || writevar)
 	{
-	    if (col && !ctx->tblcell) fputc('\n', out), col = 0;
-	    if (space && ctx->tblcell) fputc(' ', out);
+	    if (col && !ctx->tblcell && ctx->fmt != F_HTML)
+	    {
+		fputc('\n', out);
+		col = 0;
+	    }
+	    if (space && (ctx->fmt == F_HTML || ctx->tblcell)) fputc(' ', out);
 	    if (writename)
 	    {
 		if (ctx->fmt == F_HTML)
@@ -342,8 +345,12 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	if (word[0] == '`' && word[wordlen-1] == '`')
 	{
 	    word[wordlen-1] = 0;
-	    if (col && !ctx->tblcell) fputc('\n', out), col = 0;
-	    if (space && ctx->tblcell) fputc(' ', out);
+	    if (col && !ctx->tblcell && ctx->fmt != F_HTML)
+	    {
+		fputc('\n', out);
+		col = 0;
+	    }
+	    if (space && (ctx->fmt == F_HTML || ctx->tblcell)) fputc(' ', out);
 	    if (wordlen == 4 && word[1] == '-')
 	    {
 		if (ctx->fmt == F_HTML)
@@ -493,8 +500,15 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    {
 		word[wordlen-1] = 0;
 		++word;
-		if (col && !ctx->tblcell) fputc('\n', out), col = 0;
-		if (space && ctx->tblcell) fputc(' ', out);
+		if (col && !ctx->tblcell && ctx->fmt != F_HTML)
+		{
+		    fputc('\n', out);
+		    col = 0;
+		}
+		if (space && (ctx->fmt == F_HTML || ctx->tblcell))
+		{
+		    fputc(' ', out);
+		}
 		if (ctx->fmt == F_HTML)
 		{
 		    char *email = htmlescape(word);
