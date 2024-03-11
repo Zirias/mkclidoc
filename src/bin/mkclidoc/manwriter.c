@@ -52,6 +52,7 @@ typedef struct Ctx
 #define istext(m) ((m) && CliDoc_type(m) == CT_TEXT)
 #define ismpunct(c) (ispunct(c) && (c) != '\\' && (c) != '%' \
 	&& (c) != '`' && (c) != '<' && (c) != '>')
+#define isnspunct(c) ((c) == '.' || (c) == ',' || (c) == ':' || (c) == ';')
 #define istpunct(s) (ismpunct(*(s)) && \
 	(!(s)[1] || (s)[1] == ' ' || (s)[1] == '\t'))
 
@@ -111,9 +112,27 @@ static char *htmlescape(const char *str)
     return htmlnescape(str, 0);
 }
 
+static int isenvname(const char *str)
+{
+    int haveupper = 0;
+    for (;*str; ++str)
+    {
+	if (isupper(*str))
+	{
+	    haveupper = 1;
+	    continue;
+	}
+	if (haveupper && isdigit(*str)) continue;
+	if (*str != '_') return 0;
+    }
+    return haveupper;
+}
+
 static char *fetchManTextWord(const char **s, const Ctx *ctx)
 {
     size_t wordlen = 0;
+    int quote = 0;
+    if (**s == '`') quote = 1;
     while (**s && **s != ' ' && **s != '\t'
 	    && !istpunct(*s) && wordlen < 4096)
     {
@@ -143,6 +162,7 @@ static char *fetchManTextWord(const char **s, const Ctx *ctx)
 	}
 	if (ctx->fmt != F_HTML && **s == '\\') strbuf[wordlen++] = '\\';
 	strbuf[wordlen++] = *(*s)++;
+	if (quote && wordlen > 2 && (*s)[-1] == '`') break;
     }
     if (!wordlen) return 0;
     strbuf[wordlen] = 0;
@@ -232,7 +252,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    }
 	    if (ctx->fmt == F_MDOC)
 	    {
-		if (ismpunct(*str))
+		if (isnspunct(*str))
 		{
 		    fputc(' ', out);
 		    oneword = 1;
@@ -255,52 +275,97 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	size_t wordlen = strlen(word);
 	if (word[0] == '`' && word[wordlen-1] == '`')
 	{
-	    const CliDoc *ref = 0;
 	    const char *refname = 0;
-	    for (size_t i = 0; i < CDRoot_nrefs(ctx->root); ++i)
+	    word[wordlen-1] = 0;
+	    if (col) fputc('\n', out);
+	    if (wordlen == 4 && word[1] == '-')
 	    {
-		const CliDoc *r = CDRoot_ref(ctx->root, i);
-		refname = CDMRef_name(r);
-		if (*refname == '&') ++refname;
-		if (!strncmp(refname, word+1, wordlen-2))
-		{
-		    ref = r;
-		    break;
-		}
-	    }
-	    if (ref)
-	    {
-		if (col) fputc('\n', out);
 		if (ctx->fmt == F_HTML)
 		{
-		    fprintf(out, "<span class=\"name\">%s</span>(%s)",
-			    refname, CDMRef_section(ref));
+		    fprintf(out, "<span class=\"name\">%s</span>", word+1);
 		}
 		else fprintf(out, ctx->fmt == F_MDOC
-			? ".Xr %s %s" : "\\fB%s\\fP(%s)\\fR",
-			refname, CDMRef_section(ref));
-		if (ctx->fmt == F_MDOC)
-		{
-		    if (ismpunct(*str))
-		    {
-			fputc(' ', out);
-			oneword = 1;
-		    }
-		    else if (*str == ' ' || *str == '\t') nl = 1;
-		    else if (*str)
-		    {
-			fputs(" Ns ", out);
-			oneword = 1;
-		    }
-		}
-		else if (ctx->fmt == F_MAN)
-		{
-		    if (*str == ' ' || *str == '\t') nl = 1;
-		    else if (*str) oneword = 1;
-		}
-		else if (*str == ' ' || *str == '\t') fputc('\n', out);
-		continue;
+			? ".Fl %c" : "\\fB\\-%c\\fR", word[2]);
 	    }
+	    else if (word[1] == '/' ||
+		    (word[1] == '~' && word[2] == '/') ||
+		    (word[1] == '.' && (word[2] == '/' ||
+			    (word[2] == '.' && word[3] == '/'))))
+	    {
+		if (ctx->fmt == F_HTML)
+		{
+		    fprintf(out, "<span class=\"file\">%s</span>", word+1);
+		}
+		else fprintf(out, ctx->fmt == F_MDOC
+			? ".Pa %s" : "\\fI%s\\fR", word+1);
+	    }
+	    else if (isenvname(word+1))
+	    {
+		if (ctx->fmt == F_HTML)
+		{
+		    fprintf(out, "<span class=\"name\">%s</span>", word+1);
+		}
+		else fprintf(out, ctx->fmt == F_MDOC
+			? ".Ev %s" : "\\fB%s\\fR", word+1);
+	    }
+	    else
+	    {
+		const CliDoc *ref = 0;
+		for (size_t i = 0; i < CDRoot_nrefs(ctx->root); ++i)
+		{
+		    const CliDoc *r = CDRoot_ref(ctx->root, i);
+		    refname = CDMRef_name(r);
+		    if (*refname == '&') ++refname;
+		    if (!strncmp(refname, word+1, wordlen-2))
+		    {
+			ref = r;
+			break;
+		    }
+		}
+		if (ref)
+		{
+		    if (ctx->fmt == F_HTML)
+		    {
+			fprintf(out, "<span class=\"name\">%s</span>(%s)",
+				refname, CDMRef_section(ref));
+		    }
+		    else fprintf(out, ctx->fmt == F_MDOC
+			    ? ".Xr %s %s" : "\\fB%s\\fP(%s)\\fR",
+			    refname, CDMRef_section(ref));
+		}
+		else
+		{
+		    refname = 0;
+		    if (ctx->fmt == F_HTML)
+		    {
+			fprintf(out, "<span class=\"name\">%s</span>",
+				word+1);
+		    }
+		    else fprintf(out, ctx->fmt == F_MDOC
+			    ? ".Cm %s" : "\\fB%s\\fR", word+1);
+		}
+	    }
+	    if (ctx->fmt == F_MDOC)
+	    {
+		if (refname ? ismpunct(*str) : isnspunct(*str))
+		{
+		    fputc(' ', out);
+		    oneword = 1;
+		}
+		else if (*str == ' ' || *str == '\t') nl = 1;
+		else if (*str)
+		{
+		    fputs(" Ns ", out);
+		    oneword = 1;
+		}
+	    }
+	    else if (ctx->fmt == F_MAN)
+	    {
+		if (*str == ' ' || *str == '\t') nl = 1;
+		else if (*str) oneword = 1;
+	    }
+	    else if (*str == ' ' || *str == '\t') fputc('\n', out);
+	    continue;
 	}
 	else if (word[0] == '<' && word[wordlen-1] == '>')
 	{
@@ -323,7 +388,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 			: ( isemail ? "<\\fI%s\\fR>" : "\\fB%s\\fR" ), word);
 		if (ctx->fmt == F_MDOC)
 		{
-		    if (ismpunct(*str))
+		    if (isnspunct(*str))
 		    {
 			fputc(' ', out);
 			oneword = 1;
