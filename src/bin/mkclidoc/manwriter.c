@@ -42,19 +42,22 @@ typedef struct Ctx
     size_t nflags;
     size_t nargs;
     int separators;
+    int tblcell;
     Fmt fmt;
 } Ctx;
-#define Ctx_init(root, mdoc, opts) { \
-    (opts), (root), 0, 0, 0, 0, 0, 0, (fmt)}
+#define Ctx_init(root, fmt, opts) { \
+    (opts), (root), 0, 0, 0, 0, 0, 0, 0, (fmt)}
 
 #define err(m) do { \
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
 #define istext(m) ((m) && CliDoc_type(m) == CT_TEXT)
 #define ismpunct(c) (ispunct(c) && (c) != '\\' && (c) != '%' \
 	&& (c) != '`' && (c) != '<' && (c) != '>')
-#define isnspunct(c) ((c) == '.' || (c) == ',' || (c) == ':' || (c) == ';')
 #define istpunct(s) (ismpunct(*(s)) && \
 	(!(s)[1] || (s)[1] == ' ' || (s)[1] == '\t'))
+#define isodelim(c) ((c) == '(' || (c) == '[')
+#define iscdelim(c) ((c) == '.' || (c) == ',' || (c) == ':' || (c) == ';' \
+	|| (c) == ')' || (c) == ']' || (c) == '?' || (c) == '!')
 
 static char strbuf[8192];
 static char escbuf[8192];
@@ -177,10 +180,11 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
     while (*str)
     {
 	int space = 0;
+	char odelim = 0;
 	while (*str && (*str == ' ' || *str == '\t')) ++str, space = 1;
 	if (!*str) break;
 
-	if (ctx->fmt != F_HTML && *str == '.' &&
+	if (!ctx->tblcell && ctx->fmt != F_HTML && *str == '.' &&
 		(!str[1] || str[1] == ' ' || str[1] == '\t'))
 	{
 	    if (nl) fputc(' ', out);
@@ -190,29 +194,42 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	}
 	if (ismpunct(*str))
 	{
-	    if (nl)
+	    if (nl && !ctx->tblcell)
 	    {
 		fputc('\n', out);
 		col = 0;
 		nl = 0;
 	    }
-	    if ((col || ctx->fmt == F_HTML) && space) fputc(' ', out), ++col;
 	    size_t punctlen = 1;
 	    while (ismpunct(str[punctlen]) && str[punctlen] != '.') ++punctlen;
-	    if (ctx->fmt != F_HTML && col && col + punctlen > 78)
+	    if (!ctx->tblcell && ctx->fmt != F_HTML
+		    && col && col + punctlen > 78)
 	    {
 		fputc('\n', out);
 		col = 0;
 	    }
-	    fwrite(str, 1, punctlen, out);
-	    str += punctlen;
-	    col += punctlen;
-	    if (oneword)
+	    if (ctx->fmt == F_MDOC && punctlen == 1 && isodelim(*str)
+		    && (str[1] && str[1] != ' ' && str[1] != '\t'))
 	    {
-		oneword = 0;
-		col = 80;
+		odelim = *str++;
 	    }
-	    continue;
+	    else
+	    {
+		if ((col || ctx->tblcell || ctx->fmt == F_HTML) && space)
+		{
+		    fputc(' ', out);
+		    ++col;
+		}
+		fwrite(str, 1, punctlen, out);
+		str += punctlen;
+		col += punctlen;
+		if (oneword)
+		{
+		    oneword = 0;
+		    col = 80;
+		}
+		continue;
+	    }
 	}
 
 	char *word = fetchManTextWord(&str, ctx);
@@ -222,14 +239,23 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	int writevar = !strcmp(word, "%%var%%") && ctx->var;
 	if (writename || writearg || writevar)
 	{
-	    if (col) fputc('\n', out);
+	    if (col && !ctx->tblcell) fputc('\n', out), col = 0;
+	    if (space && ctx->tblcell) fputc(' ', out);
 	    if (writename)
 	    {
 		if (ctx->fmt == F_HTML)
 		{
 		    fprintf(out, "<span class=\"name\">%s</span>", ctx->name);
 		}
-		else if (ctx->fmt == F_MDOC) fputs(".Nm", out);
+		else if (ctx->fmt == F_MDOC)
+		{
+		    if (odelim)
+		    {
+			fprintf(out, ".Nm %c %s", odelim, ctx->name);
+			odelim = 0;
+		    }
+		    else fputs(".Nm", out);
+		}
 		else fprintf(out, "\\fB%s\\fR", ctx->name);
 	    }
 	    else if (writearg)
@@ -238,8 +264,17 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		{
 		    fprintf(out, "<span class=\"arg\">%s</span>", ctx->arg);
 		}
-		else fprintf(out, ctx->fmt == F_MDOC
-			? ".Ar %s" : "\\fI%s\\fR", ctx->arg);
+		else if (ctx->fmt == F_MDOC)
+		{
+		    if (odelim)
+		    {
+			fprintf(out, &".Ar %c %s"[ctx->tblcell],
+				odelim, ctx->arg);
+			odelim = 0;
+		    }
+		    else fprintf(out, &".Ar %s"[ctx->tblcell], ctx->arg);
+		}
+		else fprintf(out, "\\fI%s\\fR", ctx->arg);
 	    }
 	    else if (writevar)
 	    {
@@ -247,12 +282,22 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		{
 		    fprintf(out, "<span class=\"name\">%s</span>", ctx->var);
 		}
-		else fprintf(out, ctx->fmt == F_MDOC
-			? ".Ev %s" : "\\fB%s\\fR", ctx->var);
+		else if (ctx->fmt == F_MDOC)
+		{
+		    if (odelim)
+		    {
+			fprintf(out, &".Ev %c %s"[ctx->tblcell],
+				odelim, ctx->var);
+			odelim = 0;
+		    }
+		    else fprintf(out, &".Ev %s"[ctx->tblcell], ctx->var);
+		}
+		else fprintf(out, "\\fB%s\\fR", ctx->var);
 	    }
 	    if (ctx->fmt == F_MDOC)
 	    {
-		if (isnspunct(*str))
+		if (iscdelim(*str) &&
+			(!str[1] || str[1] == ' ' || str[1] == '\t'))
 		{
 		    fputc(' ', out);
 		    oneword = 1;
@@ -275,17 +320,26 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	size_t wordlen = strlen(word);
 	if (word[0] == '`' && word[wordlen-1] == '`')
 	{
-	    const char *refname = 0;
 	    word[wordlen-1] = 0;
-	    if (col) fputc('\n', out);
+	    if (col && !ctx->tblcell) fputc('\n', out), col = 0;
+	    if (space && ctx->tblcell) fputc(' ', out);
 	    if (wordlen == 4 && word[1] == '-')
 	    {
 		if (ctx->fmt == F_HTML)
 		{
 		    fprintf(out, "<span class=\"name\">%s</span>", word+1);
 		}
-		else fprintf(out, ctx->fmt == F_MDOC
-			? ".Fl %c" : "\\fB\\-%c\\fR", word[2]);
+		else if (ctx->fmt == F_MDOC)
+		{
+		    if (odelim)
+		    {
+			fprintf(out, &".Fl %c %c"[ctx->tblcell],
+				odelim, word[2]);
+			odelim = 0;
+		    }
+		    else fprintf(out, &".Fl %c"[ctx->tblcell], word[2]);
+		}
+		else fprintf(out, "\\fB\\-%c\\fR", word[2]);
 	    }
 	    else if (word[1] == '/' ||
 		    (word[1] == '~' && word[2] == '/') ||
@@ -296,8 +350,17 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		{
 		    fprintf(out, "<span class=\"file\">%s</span>", word+1);
 		}
-		else fprintf(out, ctx->fmt == F_MDOC
-			? ".Pa %s" : "\\fI%s\\fR", word+1);
+		else if (ctx->fmt == F_MDOC)
+		{
+		    if (odelim)
+		    {
+			fprintf(out, &".Pa %c %s"[ctx->tblcell],
+				odelim, word+1);
+			odelim = 0;
+		    }
+		    else fprintf(out, &".Pa %s"[ctx->tblcell], word+1);
+		}
+		else fprintf(out, "\\fI%s\\fR", word+1);
 	    }
 	    else if (isenvname(word+1))
 	    {
@@ -305,12 +368,22 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		{
 		    fprintf(out, "<span class=\"name\">%s</span>", word+1);
 		}
-		else fprintf(out, ctx->fmt == F_MDOC
-			? ".Ev %s" : "\\fB%s\\fR", word+1);
+		else if (ctx->fmt == F_MDOC)
+		{
+		    if (odelim)
+		    {
+			fprintf(out, &".Ev %c %s"[ctx->tblcell],
+				odelim, word+1);
+			odelim = 0;
+		    }
+		    else fprintf(out, &".Ev %s"[ctx->tblcell], word+1);
+		}
+		else fprintf(out, "\\fB%s\\fR", word+1);
 	    }
 	    else
 	    {
 		const CliDoc *ref = 0;
+		const char *refname = 0;
 		for (size_t i = 0; i < CDRoot_nrefs(ctx->root); ++i)
 		{
 		    const CliDoc *r = CDRoot_ref(ctx->root, i);
@@ -329,8 +402,18 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 			fprintf(out, "<span class=\"name\">%s</span>(%s)",
 				refname, CDMRef_section(ref));
 		    }
-		    else fprintf(out, ctx->fmt == F_MDOC
-			    ? ".Xr %s %s" : "\\fB%s\\fP(%s)\\fR",
+		    else if (ctx->fmt == F_MDOC)
+		    {
+			if (odelim)
+			{
+			    fprintf(out, &".Xr %c %s %s"[ctx->tblcell],
+				    odelim, refname, CDMRef_section(ref));
+			    odelim = 0;
+			}
+			else fprintf(out, &".Xr %s %s"[ctx->tblcell],
+				refname, CDMRef_section(ref));
+		    }
+		    else fprintf(out, "\\fB%s\\fP(%s)\\fR",
 			    refname, CDMRef_section(ref));
 		}
 		else
@@ -341,13 +424,23 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 			fprintf(out, "<span class=\"name\">%s</span>",
 				word+1);
 		    }
-		    else fprintf(out, ctx->fmt == F_MDOC
-			    ? ".Cm %s" : "\\fB%s\\fR", word+1);
+		    else if (ctx->fmt == F_MDOC)
+		    {
+			if (odelim)
+			{
+			    fprintf(out, &".Cm %c %s"[ctx->tblcell],
+				    odelim, word+1);
+			    odelim = 0;
+			}
+			else fprintf(out, &".Cm %s"[ctx->tblcell], word+1);
+		    }
+		    else fprintf(out, "\\fB%s\\fR", word+1);
 		}
 	    }
 	    if (ctx->fmt == F_MDOC)
 	    {
-		if (refname ? ismpunct(*str) : isnspunct(*str))
+		if (iscdelim(*str) &&
+			(!str[1] || str[1] == ' ' || str[1] == '\t'))
 		{
 		    fputc(' ', out);
 		    oneword = 1;
@@ -375,7 +468,8 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    {
 		word[wordlen-1] = 0;
 		++word;
-		if (col) fputc('\n', out);
+		if (col && !ctx->tblcell) fputc('\n', out), col = 0;
+		if (space && ctx->tblcell) fputc(' ', out);
 		if (ctx->fmt == F_HTML)
 		{
 		    char *email = htmlescape(word);
@@ -383,12 +477,24 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 			    : "<a href=\"%s\">%s</a>",
 			    email, email);
 		}
-		else fprintf(out, ctx->fmt == F_MDOC
-			? ( isemail ? ".Aq Mt %s" : ".Lk %s" )
-			: ( isemail ? "<\\fI%s\\fR>" : "\\fB%s\\fR" ), word);
+		else if (ctx->fmt == F_MDOC)
+		{
+		    if (odelim)
+		    {
+			fprintf(out, &(isemail ? ".Aq %c Mt %s"
+				    : ".Lk %c %s")[ctx->tblcell],
+				odelim, word);
+			odelim = 0;
+		    }
+		    else fprintf(out, &(isemail ? ".Aq Mt %s"
+				: ".Lk %s")[ctx->tblcell], word);
+		}
+		else fprintf(out, isemail ?
+			"<\\fI%s\\fR>" : "\\fB%s\\fR", word);
 		if (ctx->fmt == F_MDOC)
 		{
-		    if (isnspunct(*str))
+		    if (iscdelim(*str) &&
+			    (!str[1] || str[1] == ' ' || str[1] == '\t'))
 		    {
 			fputc(' ', out);
 			oneword = 1;
@@ -411,11 +517,17 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	}
 	if (nl || (ctx->fmt != F_HTML && col + !!col + wordlen > 78))
 	{
-	    fputc('\n', out);
+	    if (nl && ctx->tblcell)
+	    {
+		if (ctx->fmt == F_MDOC) fputs(" No ", out);
+		else fputc(' ', out);
+	    }
+	    else fputc('\n', out);
 	    col = 0;
 	    nl = 0;
 	}
 	if (col && space) ++col, fputc(' ', out);
+	if (odelim) fputc(odelim, out), ++col;
 	if (ctx->fmt == F_HTML) fputs(htmlescape(word), out);
 	else fputs(word, out);
 	if (oneword)
@@ -626,36 +738,43 @@ error:
     return -1;
 }
 
-static void writeManCell(FILE *out, Ctx *ctx, const char *cell)
+static void updateMdocCellWidth(size_t *len, char *str, const Ctx *ctx,
+	const char *cell)
 {
-    if (!cell) return;
-    while (*cell) switch (*cell)
+    size_t cellwidth = 0;
+    Ctx fakeCtx = Ctx_init(0, F_HTML, 0);
+    while (*cell == ' ' || *cell == '\t') ++cell;
+    while (*cell)
     {
-	case '%':
-	    if (!strcmp(cell, "%%name%%"))
-	    {
-		fprintf(out, ctx->fmt == F_MDOC
-			? "\" Ns Nm %s \"" : "\\fB%s\\fR", ctx->name);
-		cell += 8;
-		continue;
-	    }
-	    if (!strcmp(cell, "%%arg%%"))
-	    {
-		fprintf(out, ctx->fmt == F_MDOC
-			? "\" Ns Ar %s \"" : "\\fI%s\\fR", ctx->arg);
-		cell += 7;
-		continue;
-	    }
-	    ATTR_FALLTHROUGH;
-	case '"':
-	    if (ctx->fmt == F_MAN) goto writechr;
-	    ATTR_FALLTHROUGH;
-	case '\\':
-	    fputc('\\', out);
-	    ATTR_FALLTHROUGH;
-	default:
-	writechr:
-	    fputc(*cell++, out);
+	while (*cell == ' ' || *cell == '\t' || ismpunct(*cell))
+	{
+	    ++cell;
+	    ++cellwidth;
+	}
+	char *word = fetchManTextWord(&cell, &fakeCtx);
+	if (!word) break;
+	size_t wordlen = strlen(word);
+	if (!strcmp(word, "%%name%%")) wordlen = strlen(ctx->name);
+	else if (ctx->arg && !strcmp(word, "%%arg%%"))
+	{
+	    wordlen = strlen(ctx->arg);
+	}
+	else if (ctx->var && !strcmp(word, "%%var%%"))
+	{
+	    wordlen = strlen(ctx->var);
+	}
+	else if (word[0] == '`' && word[wordlen-1] == '`')
+	{
+	    wordlen -= 2;
+	}
+	cellwidth += wordlen;
+    }
+    if (cellwidth > 31) cellwidth = 31;
+    if (--cellwidth > *len)
+    {
+	memset(str+*len, 'x', cellwidth-*len);
+	str[cellwidth] = 0;
+	*len = cellwidth;
     }
 }
 
@@ -668,27 +787,22 @@ static void writeManTable(FILE *out, Ctx *ctx, const CliDoc *table)
     {
 	struct {
 	    size_t len;
-	    const char *str;
+	    char str[32];
 	} *wspec = 0;
 	wspec = xmalloc(width * sizeof *wspec);
-	memset(wspec, 0, sizeof *wspec);
+	memset(wspec, 0, width * sizeof *wspec);
 	for (size_t y = 0; y < height; ++y)
 	{
 	    for (size_t x = 0; x < width; ++x)
 	    {
 		const char *c = CDTable_cell(table, x, y);
-		size_t len = strlen(c);
-		if (len > wspec[x].len)
-		{
-		    wspec[x].len = len;
-		    wspec[x].str = c;
-		}
+		updateMdocCellWidth(&wspec[x].len, wspec[x].str, ctx, c);
 	    }
 	}
 	fputs("\n.Bl -column -compact", out);
 	for (size_t x = 0; x < width; ++x)
 	{
-	    fprintf(out, " \"%s\"", wspec[x].str ? wspec[x].str : "");
+	    fprintf(out, " %s", wspec[x].str);
 	}
 	free(wspec);
     }
@@ -702,22 +816,21 @@ static void writeManTable(FILE *out, Ctx *ctx, const CliDoc *table)
 	}
 	fputc('.', out);
     }
+    ctx->tblcell = 1;
     for (size_t y = 0; y < height; ++y)
     {
 	if (ctx->fmt == F_HTML) fputs("<tr>\n", out);
 	for (size_t x = 0; x < width; ++x)
 	{
 	    if (ctx->fmt == F_HTML) fputs("<td>\n", out);
-	    else if (ctx->fmt == F_MDOC) fputs(x ? " Ta \"" : "\n.It \"", out);
+	    else if (ctx->fmt == F_MDOC) fputs(x ? " Ta " : "\n.It ", out);
 	    else fputc(x ? '\t' : '\n', out);
-	    if (ctx->fmt == F_HTML) writeManText(out, ctx,
-		    CDTable_cell(table, x, y));
-	    else writeManCell(out, ctx, CDTable_cell(table, x, y));
+	    writeManText(out, ctx, CDTable_cell(table, x, y));
 	    if (ctx->fmt == F_HTML) fputs("</td>\n", out);
-	    else if (ctx->fmt == F_MDOC) fputc('"', out);
 	}
 	if (ctx->fmt == F_HTML) fputs("</tr>\n", out);
     }
+    ctx->tblcell = 0;
     if (ctx->fmt == F_HTML) fputs("</table>\n", out);
     else if (ctx->fmt == F_MDOC) fputs("\n.El", out);
     else fputs("\n.TE", out);
@@ -769,6 +882,7 @@ static int writeManDescription(FILE *out, Ctx *ctx,
 	    break;
 
 	case CT_TABLE:
+	    if (idx && ctx->fmt == F_MDOC) fputs("\n.sp", out);
 	    writeManTable(out, ctx, desc);
 	    break;
 
