@@ -115,8 +115,25 @@ static char *htmlescape(const char *str)
     return htmlnescape(str, 0);
 }
 
+static char *mdocargescape(const char *str)
+{
+    size_t outlen = 0;
+    for (; *str && outlen < 8150; ++str)
+    {
+	if (isodelim(*str) || iscdelim(*str))
+	{
+	    escbuf[outlen++] = '\\';
+	    escbuf[outlen++] = '&';
+	}
+	escbuf[outlen++] = *str;
+    }
+    escbuf[outlen] = 0;
+    return escbuf;
+}
+
 static int isenvname(const char *str)
 {
+    if (!str[1]) return 0;
     int haveupper = 0;
     for (;*str; ++str)
     {
@@ -163,8 +180,9 @@ static char *fetchManTextWord(const char **s, const Ctx *ctx)
 		return strbuf;
 	    }
 	}
-	if (ctx->fmt != F_HTML && **s == '\\') strbuf[wordlen++] = '\\';
-	strbuf[wordlen++] = *(*s)++;
+	strbuf[wordlen++] = **s;
+	if (ctx->fmt != F_HTML && **s == '\\') strbuf[wordlen++] = 'e';
+	(*s)++;
 	if (quote && wordlen > 2 && (*s)[-1] == '`') break;
     }
     if (!wordlen) return 0;
@@ -251,7 +269,8 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		{
 		    if (odelim)
 		    {
-			fprintf(out, ".Nm %c %s", odelim, ctx->name);
+			fprintf(out, ".Nm %c %s", odelim,
+				mdocargescape(ctx->name));
 			odelim = 0;
 		    }
 		    else fputs(".Nm", out);
@@ -269,10 +288,11 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		    if (odelim)
 		    {
 			fprintf(out, &".Ar %c %s"[ctx->tblcell],
-				odelim, ctx->arg);
+				odelim, mdocargescape(ctx->arg));
 			odelim = 0;
 		    }
-		    else fprintf(out, &".Ar %s"[ctx->tblcell], ctx->arg);
+		    else fprintf(out, &".Ar %s"[ctx->tblcell],
+			    mdocargescape(ctx->arg));
 		}
 		else fprintf(out, "\\fI%s\\fR", ctx->arg);
 	    }
@@ -287,10 +307,11 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		    if (odelim)
 		    {
 			fprintf(out, &".Ev %c %s"[ctx->tblcell],
-				odelim, ctx->var);
+				odelim, mdocargescape(ctx->var));
 			odelim = 0;
 		    }
-		    else fprintf(out, &".Ev %s"[ctx->tblcell], ctx->var);
+		    else fprintf(out, &".Ev %s"[ctx->tblcell],
+			    mdocargescape(ctx->var));
 		}
 		else fprintf(out, "\\fB%s\\fR", ctx->var);
 	    }
@@ -355,10 +376,11 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		    if (odelim)
 		    {
 			fprintf(out, &".Pa %c %s"[ctx->tblcell],
-				odelim, word+1);
+				odelim, mdocargescape(word+1));
 			odelim = 0;
 		    }
-		    else fprintf(out, &".Pa %s"[ctx->tblcell], word+1);
+		    else fprintf(out, &".Pa %s"[ctx->tblcell],
+			    mdocargescape(word+1));
 		}
 		else fprintf(out, "\\fI%s\\fR", word+1);
 	    }
@@ -373,10 +395,11 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		    if (odelim)
 		    {
 			fprintf(out, &".Ev %c %s"[ctx->tblcell],
-				odelim, word+1);
+				odelim, mdocargescape(word+1));
 			odelim = 0;
 		    }
-		    else fprintf(out, &".Ev %s"[ctx->tblcell], word+1);
+		    else fprintf(out, &".Ev %s"[ctx->tblcell],
+			    mdocargescape(word+1));
 		}
 		else fprintf(out, "\\fB%s\\fR", word+1);
 	    }
@@ -407,11 +430,12 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 			if (odelim)
 			{
 			    fprintf(out, &".Xr %c %s %s"[ctx->tblcell],
-				    odelim, refname, CDMRef_section(ref));
+				    odelim, mdocargescape(refname),
+				    CDMRef_section(ref));
 			    odelim = 0;
 			}
 			else fprintf(out, &".Xr %s %s"[ctx->tblcell],
-				refname, CDMRef_section(ref));
+				mdocargescape(refname), CDMRef_section(ref));
 		    }
 		    else fprintf(out, "\\fB%s\\fP(%s)\\fR",
 			    refname, CDMRef_section(ref));
@@ -429,10 +453,11 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 			if (odelim)
 			{
 			    fprintf(out, &".Cm %c %s"[ctx->tblcell],
-				    odelim, word+1);
+				    odelim, mdocargescape(word+1));
 			    odelim = 0;
 			}
-			else fprintf(out, &".Cm %s"[ctx->tblcell], word+1);
+			else fprintf(out, &".Cm %s"[ctx->tblcell],
+				mdocargescape(word+1));
 		    }
 		    else fprintf(out, "\\fB%s\\fR", word+1);
 		}
@@ -846,10 +871,13 @@ static int writeManDict(FILE *out, Ctx *ctx, const CliDoc *dict)
     {
 	const char *key = CDDict_key(dict, i);
 	const CliDoc *val = CDDict_val(dict, i);
-	if (ctx->fmt == F_HTML) fprintf(out, "<dt>%s</dt>\n<dd>",
-		htmlescape(key));
-	else fprintf(out, ctx->fmt == F_MDOC ?
-		"\n.It %s" : "\n.TP 8n\n%s", key);
+	if (ctx->fmt == F_HTML) fputs("<dt>", out);
+	else if (ctx->fmt == F_MDOC) fputs("\n.It ", out);
+	else fputs("\n.TP 8n\n", out);
+	ctx->tblcell = 1;
+	writeManText(out, ctx, key);
+	ctx->tblcell = 0;
+	if (ctx->fmt == F_HTML) fputs("</dt>\n<dd>", out);
 	if (writeManDescription(out, ctx, val, 0) < 0) return -1;
 	if (ctx->fmt == F_HTML) fputs("</dd>\n", out);
     }
