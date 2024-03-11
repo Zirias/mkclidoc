@@ -133,7 +133,7 @@ mdoc or html) format:
   - if it starts with `/`, `~/`, `./` or `../`, it's formatted as a path/file
     name.
   - if it looks like an environment variable name (only uppercase letters,
-    underscores and digits, with at least one letter required and digits only
+    underscores and digits, with at least two letters required and digits only
     allowed after the first letter), it's formatted as a variable name.
   - if it's a name mentioned in `manrefs` (without the section), it is
     rendered as a cross-reference. To render cross-references without adding
