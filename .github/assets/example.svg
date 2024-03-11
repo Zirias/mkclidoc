@@ -224,53 +224,6 @@ span.arg, span.file {
 converts nonsense to other, much more beautiful nonsense. It also applies a green tint to it.</p>
 <p>The options are as follows:</p>
 <dl class="description">
-<dt><span class="flag">-k</span>&#160;<span class="arg">kind</span></dt>
-<dd>
-<p><span class="arg">kind</span>
-specifies the kind of nonsense.</p>
-<table>
-<tr>
-<td>
-kind</td>
-<td>
-description</td>
-<td>
-dangerous</td>
-</tr>
-<tr>
-<td>
---</td>
-<td>
---</td>
-<td>
---</td>
-</tr>
-<tr>
-<td>
-fun</td>
-<td>
-funny nonsense</td>
-<td>
-no</td>
-</tr>
-<tr>
-<td>
-cringe</td>
-<td>
-unsettling nonsense</td>
-<td>
-no</td>
-</tr>
-<tr>
-<td>
-psych</td>
-<td>
-horrible nonsense</td>
-<td>
-yes</td>
-</tr>
-</table>
-</dd>
 <dt><span class="flag">-G</span></dt>
 <dd>
 <p>lighter green</p>
@@ -303,12 +256,60 @@ yes</td>
 </dd>
 </dl>
 </dd>
+<dt><span class="flag">-k</span>&#160;<span class="arg">kind</span></dt>
+<dd>
+<p><span class="arg">kind</span>
+specifies the kind of nonsense.</p>
+<table>
+<tr>
+<td>
+kind</td>
+<td>
+description</td>
+<td>
+dangerous</td>
+</tr>
+<tr>
+<td>
+--</td>
+<td>
+--</td>
+<td>
+--</td>
+</tr>
+<tr>
+<td>
+<span class="name">fun</span></td>
+<td>
+funny nonsense</td>
+<td>
+no</td>
+</tr>
+<tr>
+<td>
+<span class="name">cringe</span></td>
+<td>
+unsettling nonsense</td>
+<td>
+no</td>
+</tr>
+<tr>
+<td>
+<span class="name">psych</span></td>
+<td>
+horrible nonsense</td>
+<td>
+yes</td>
+</tr>
+</table>
+</dd>
 <dt><span class="flag">-m</span>&#160;<span class="arg">mode</span></dt>
 <dd>
 <p>Frobnication mode, one of:</p>
 <dl class="description">
 <dt>foo:</dt>
-<dd><p>do some foo</p>
+<dd><p>do some foo (see
+<span class="name">frobrc</span>(5))</p>
 </dd>
 <dt>bar:</dt>
 <dd><p>do some bar instead, using
@@ -341,11 +342,16 @@ yes</td>
 <dl class="environment">
 <dt><span class="name">GREEN</span></dt>
 <dd>
-<p>Overrides the default green generator</p>
+<p>Overrides the default green generator
+<span class="file">/usr/bin/green</span>.</p>
 </dd>
 <dt><span class="name">GREENOPTS</span></dt>
 <dd>
-<p>Extra arguments for the green generator</p>
+<p><span class="name">GREENOPTS</span>
+is passed as extra arguments for
+<span class="name">green</span>(1)
+or
+<span class="name">GREEN</span>.</p>
 </dd>
 </dl>
 <h2>FILES</h2>
@@ -364,7 +370,7 @@ John Doe  &lt;<a href="mailto:john@doe.invalid">john@doe.invalid</a>&gt;
 <dt>Origin:</dt>
 <dd>frob 1.0</dd>
 <dt>Date:</dt>
-<dd>March 3, 2024</dd>
+<dd>March 11, 2024</dd>
 <dt>Title:</dt>
 <dd>FROB(1)</dd>
 </dl>

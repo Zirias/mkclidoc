@@ -32,7 +32,7 @@ A description for `mkclidoc` is a simple text format like in this example:
 
     name: frob
     comment: frobnicate input
-    date: 20240303
+    date: 20240311
     author: John Doe <john@doe.invalid>
     version: 1.0
     license: BSD
@@ -41,7 +41,7 @@ A description for `mkclidoc` is a simple text format like in this example:
     %%name%% converts nonsense to other, much more beautiful nonsense.
     It also applies a green tint to it.
     .
-    manrefs: foobar frobrc.5
+    manrefs: foobar frobrc.5 &green
     defgroup: 1
 
     [flag G]
@@ -69,15 +69,15 @@ A description for `mkclidoc` is a simple text format like in this example:
     %%arg%% specifies the kind of nonsense.
     | kind   | description | dangerous |
     | --     | -- | -- |
-    | fun    | funny nonsense | no |
-    | cringe | unsettling nonsense | no |
-    | psych  | horrible nonsense | yes |
+    | `fun`    | funny nonsense | no |
+    | `cringe` | unsettling nonsense | no |
+    | `psych`  | horrible nonsense | yes |
     .
 
     [flag m mode]
     description:
     Frobnication mode, one of:
-    - [foo:]: do some foo
+    - [foo:]: do some foo (see `frobrc`)
     - [bar:]: do some bar instead, using `foobar`
     .
     default: foo
@@ -91,10 +91,10 @@ A description for `mkclidoc` is a simple text format like in this example:
     description: The main configuration file for %%name%%
 
     [var GREEN]
-    description: Overrides the default green generator
+    description: Overrides the default green generator `/usr/bin/green`.
 
     [var GREENOPTS]
-    description: Extra arguments for the green generator
+    description: %%var%% is passed as extra arguments for `green` or `GREEN`.
 
 This example shows all currently supported fields and elements.
 
@@ -128,10 +128,18 @@ mdoc or html) format:
 
 * `<link>`: If `link` contains `://`, it is rendered as an URL, otherwise, if
   it contains `@`, it is rendered as an email address.
-* `` `ref` ``: If `ref` is a name mentioned in `manrefs` (without the section),
-  it is rendered as a cross-reference. To render cross-references without
-  adding them to the references shown in `SEE ALSO`, they can be added to
-  `manrefs` with a `&` prepended.
+* `` `text` ``: `text` is specially formatted based on its content:
+  - if it's a single letter preceded by `-`, it's formatted as a flag.
+  - if it starts with `/`, `~/`, `./` or `../`, it's formatted as a path/file
+    name.
+  - if it looks like an environment variable name (only uppercase letters,
+    underscores and digits, with at least one letter required and digits only
+    allowed after the first letter), it's formatted as a variable name.
+  - if it's a name mentioned in `manrefs` (without the section), it is
+    rendered as a cross-reference. To render cross-references without adding
+    them to the references shown in `SEE ALSO`, they can be added to
+    `manrefs` with a `&` prepended.
+  - if none of these applies, it's rendered as some generic literal argument.
 
 ### Rendered example
 Here's what the example above looks like rendered as help text (`cpp` and
@@ -149,13 +157,13 @@ Here's what the example above looks like rendered as help text (`cpp` and
         -i intensity  how hard to try
                       min: 0 (not at all), max: 100 (full power), default: 50
         -k kind       kind specifies the kind of nonsense.
-                      kind    description          dangerous
-                      --      --                   --
-                      fun     funny nonsense       no
-                      cringe  unsettling nonsense  no
-                      psych   horrible nonsense    yes
+                      kind      description          dangerous
+                      --        --                   --
+                      `fun`     funny nonsense       no
+                      `cringe`  unsettling nonsense  no
+                      `psych`   horrible nonsense    yes
         -m mode       Frobnication mode, one of:
-                      foo:  do some foo
+                      foo:  do some foo (see `frobrc`)
                       bar:  do some bar instead, using `foobar`
                       default: foo
         filename      frobnicate the file filename
