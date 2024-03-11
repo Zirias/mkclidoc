@@ -338,7 +338,6 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		if (*str == ' ' || *str == '\t') nl = 1;
 		else if (*str) oneword = 1;
 	    }
-	    else if (*str == ' ' || *str == '\t') fputc('\n', out);
 	    continue;
 	}
 	size_t wordlen = strlen(word);
@@ -355,7 +354,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    {
 		if (ctx->fmt == F_HTML)
 		{
-		    fprintf(out, "<span class=\"name\">%s</span>", word+1);
+		    fprintf(out, "<span class=\"flag\">%s</span>", word+1);
 		}
 		else if (ctx->fmt == F_MDOC)
 		{
@@ -489,7 +488,6 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		if (*str == ' ' || *str == '\t') nl = 1;
 		else if (*str) oneword = 1;
 	    }
-	    else if (*str == ' ' || *str == '\t') fputc('\n', out);
 	    continue;
 	}
 	else if (word[0] == '<' && word[wordlen-1] == '>')
@@ -550,7 +548,6 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		    if (*str == ' ' || *str == '\t') nl = 1;
 		    else if (*str) oneword = 1;
 		}
-		else if (*str == ' ' || *str == '\t') fputc('\n', out);
 		continue;
 	    }
 	}
@@ -565,7 +562,7 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	    col = 0;
 	    nl = 0;
 	}
-	if (col && space) ++col, fputc(' ', out);
+	if ((col || ctx->fmt == F_HTML) && space) ++col, fputc(' ', out);
 	if (odelim) fputc(odelim, out), ++col;
 	if (ctx->fmt == F_HTML) fputs(htmlescape(word), out);
 	else fputs(word, out);
