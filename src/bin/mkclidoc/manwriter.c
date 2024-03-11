@@ -38,13 +38,14 @@ typedef struct Ctx
     const CliDoc *root;
     const char *name;
     const char *arg;
+    const char *var;
     size_t nflags;
     size_t nargs;
     int separators;
     Fmt fmt;
 } Ctx;
 #define Ctx_init(root, mdoc, opts) { \
-    (opts), (root), 0, 0, 0, 0, 0, (fmt)}
+    (opts), (root), 0, 0, 0, 0, 0, 0, (fmt)}
 
 #define err(m) do { \
     fprintf(stderr, "Cannot write man: %s\n", (m)); goto error; } while (0)
@@ -132,6 +133,13 @@ static char *fetchManTextWord(const char **s, const Ctx *ctx)
 		*s += sizeof "%%arg%%" - 1;
 		return strbuf;
 	    }
+	    if (!strcmp(*s, "%%var%%"))
+	    {
+		if (wordlen) break;
+		strcpy(strbuf, "%%var%%");
+		*s += sizeof "%%var%%" - 1;
+		return strbuf;
+	    }
 	}
 	if (ctx->fmt != F_HTML && **s == '\\') strbuf[wordlen++] = '\\';
 	strbuf[wordlen++] = *(*s)++;
@@ -191,7 +199,8 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 	if (!word) break;
 	int writename = !strcmp(word, "%%name%%");
 	int writearg = !strcmp(word, "%%arg%%") && ctx->arg;
-	if (writename || writearg)
+	int writevar = !strcmp(word, "%%var%%") && ctx->var;
+	if (writename || writearg || writevar)
 	{
 	    if (col) fputc('\n', out);
 	    if (writename)
@@ -211,6 +220,15 @@ static void writeManText(FILE *out, Ctx *ctx, const char *str)
 		}
 		else fprintf(out, ctx->fmt == F_MDOC
 			? ".Ar %s" : "\\fI%s\\fR", ctx->arg);
+	    }
+	    else if (writevar)
+	    {
+		if (ctx->fmt == F_HTML)
+		{
+		    fprintf(out, "<span class=\"name\">%s</span>", ctx->var);
+		}
+		else fprintf(out, ctx->fmt == F_MDOC
+			? ".Ev %s" : "\\fB%s\\fR", ctx->var);
 	    }
 	    if (ctx->fmt == F_MDOC)
 	    {
@@ -960,18 +978,20 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, const FmtOpts *opts)
 	    if (fmt == F_MAN) fprintf(out, "\n.TP %un",
 		    (unsigned)wspec.tagwidth);
 	    const CliDoc *var = CDRoot_var(root, i);
+	    ctx.var = CDNamed_name(var);
 	    if (fmt == F_HTML)
 	    {
 		fprintf(out,
 			"<dt><span class=\"name\">%s</span></dt>\n<dd>\n",
-			htmlescape(CDNamed_name(var)));
+			htmlescape(ctx.var));
 	    }
 	    else fprintf(out, fmt == F_MDOC ? "\n.It Ev %s" : "\n\\fB%s\\fR",
-		    CDNamed_name(var));
+		    ctx.var);
 	    if (writeManDescription(out, &ctx,
 			CDNamed_description(var), 0) < 0) goto error;
 	    if (fmt == F_HTML) fputs("</dd>\n", out);
 	}
+	ctx.var = 0;
 	if (fmt == F_HTML) fputs("</dl>\n", out);
 	if (fmt == F_MDOC) fputs("\n.El", out);
     }
