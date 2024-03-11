@@ -220,8 +220,7 @@ span.arg, span.file {
 </dd>
 </dl>
 <h2>DESCRIPTION</h2>
-<p><span class="name">frob</span>
-converts nonsense to other, much more beautiful nonsense. It also applies a green tint to it.</p>
+<p><span class="name">frob</span> converts nonsense to other, much more beautiful nonsense. It also applies a green tint to it.</p>
 <p>The options are as follows:</p>
 <dl class="description">
 <dt><span class="flag">-G</span></dt>
@@ -258,8 +257,7 @@ converts nonsense to other, much more beautiful nonsense. It also applies a gree
 </dd>
 <dt><span class="flag">-k</span>&#160;<span class="arg">kind</span></dt>
 <dd>
-<p><span class="arg">kind</span>
-specifies the kind of nonsense.</p>
+<p><span class="arg">kind</span> specifies the kind of nonsense.</p>
 <table>
 <tr>
 <td>
@@ -308,12 +306,10 @@ yes</td>
 <p>Frobnication mode, one of:</p>
 <dl class="description">
 <dt>foo:</dt>
-<dd><p>do some foo (see
-<span class="name">frobrc</span>(5))</p>
+<dd><p>do some foo (see <span class="name">frobrc</span>(5))</p>
 </dd>
 <dt>bar:</dt>
-<dd><p>do some bar instead, using
-<span class="name">foobar</span>(1)</p>
+<dd><p>do some bar instead, using <span class="name">foobar</span>(1)</p>
 </dd>
 </dl>
 <dl class="meta">
@@ -323,8 +319,7 @@ yes</td>
 </dd>
 <dt><span class="arg">filename</span></dt>
 <dd>
-<p>frobnicate the file
-<span class="arg">filename</span></p>
+<p>frobnicate the file <span class="arg">filename</span></p>
 <dl class="meta">
 <dt>default:</dt><dd><p>frobnicate thin air</p>
 </dd>
@@ -342,24 +337,18 @@ yes</td>
 <dl class="environment">
 <dt><span class="name">GREEN</span></dt>
 <dd>
-<p>Overrides the default green generator
-<span class="file">/usr/bin/green</span>.</p>
+<p>Overrides the default green generator <span class="file">/usr/bin/green</span>.</p>
 </dd>
 <dt><span class="name">GREENOPTS</span></dt>
 <dd>
-<p><span class="name">GREENOPTS</span>
-is passed as extra arguments for
-<span class="name">green</span>(1)
-or
-<span class="name">GREEN</span>.</p>
+<p><span class="name">GREENOPTS</span> is passed as extra arguments for <span class="name">green</span>(1) or <span class="name">GREEN</span>.</p>
 </dd>
 </dl>
 <h2>FILES</h2>
 <dl class="description">
 <dt><span class="file">/usr/local/etc/frobrc</span></dt>
 <dd>
-<p>The main configuration file for
-<span class="name">frob</span></p>
+<p>The main configuration file for <span class="name">frob</span></p>
 </dd>
 </dl>
 <h2>SEE ALSO</h2>
