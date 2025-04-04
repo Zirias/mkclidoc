@@ -20,6 +20,7 @@ typedef enum Fmt
 
 typedef struct FmtOpts
 {
+    const char *sect;
     union {
 	/* FMT_MDOC */
 	int os;
@@ -28,6 +29,7 @@ typedef struct FmtOpts
 	struct {
 	    const char *style;
 	    const char *styleuri;
+	    const char *sectname;
 	};
     };
 } FmtOpts;
@@ -998,21 +1000,29 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, const FmtOpts *opts)
     const CliDoc *version = CDRoot_version(root);
     const CliDoc *comment = CDRoot_comment(root);
     if (!istext(comment)) err("missing comment");
+    const char *sect = opts->sect;
+    if (!sect) sect = "1";
 
     time_t dv = CDDate_date(date);
     struct tm *tm = localtime(&dv);
     if (fmt == F_HTML)
     {
+	char *sectname = copystr(htmlescape(opts->sectname ?
+		    opts->sectname : "General Commands Manual"));
 	const char *title = strToUpper(htmlescape(ctx.name));
-	if (opts->style) fprintf(out, HTML_HEADER_STYLE(opts->style, title));
+	if (opts->style) fprintf(out, HTML_HEADER_STYLE(opts->style,
+		    title, sect, sectname));
 	else if (opts->styleuri) fprintf(out,
-		HTML_HEADER_STYLEURI(htmlescape(opts->styleuri), title));
-	else fprintf(out, HTML_HEADER_STYLE(HTML_DEFAULT_STYLE, title));
+		HTML_HEADER_STYLEURI(htmlescape(opts->styleuri),
+		    title, sect, sectname));
+	else fprintf(out, HTML_HEADER_STYLE(HTML_DEFAULT_STYLE,
+		    title, sect, sectname));
 	fprintf(out, "<h2>NAME</h2>\n<dl class=\"name\">\n"
 		"<dt><span class=\"name\">%s</span> &ndash;</dt>\n"
 		"<dd>", htmlescape(ctx.name));
 	writeManText(out, &ctx, CDText_str(comment));
 	fputs("</dd>\n</dl>\n", out);
+	free(sectname);
     }
     else if (fmt == F_MDOC)
     {
@@ -1020,7 +1030,7 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, const FmtOpts *opts)
 	snprintf(strbuf + mlen, sizeof strbuf - mlen,
 		" %d, %d", tm->tm_mday, tm->tm_year + 1900);
 	fprintf(out, ".Dd %s", strbuf);
-	fprintf(out, "\n.Dt %s 1\n.Os", strToUpper(ctx.name));
+	fprintf(out, "\n.Dt %s %s\n.Os", strToUpper(ctx.name), sect);
 	if (opts->os)
 	{
 	    fprintf(out, " %s", ctx.name);
@@ -1031,7 +1041,7 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, const FmtOpts *opts)
     }
     else
     {
-	fprintf(out, ".TH \"%s\" \"1\" ", strToUpper(ctx.name));
+	fprintf(out, ".TH \"%s\" \"%s\" ", strToUpper(ctx.name), sect);
 	size_t mlen = strftime(strbuf, sizeof strbuf, "%B", tm);
 	snprintf(strbuf + mlen, sizeof strbuf - mlen,
 		" %d, %d", tm->tm_mday, tm->tm_year + 1900);
@@ -1338,35 +1348,6 @@ error:
     return -1;
 }
 
-int writeMan(FILE *out, const CliDoc *root, const char *args)
-{
-    if (args)
-    {
-	fputs("The man format does not support any arguments.\n", stderr);
-	return -1;
-    }
-    return write(out, root, F_MAN, 0);
-}
-
-int writeMdoc(FILE *out, const CliDoc *root, const char *args)
-{
-    FmtOpts opts;
-    memset(&opts, 0, sizeof opts);
-
-    if (args)
-    {
-	if (!strcmp(args, "os")) opts.os = 1;
-	else
-	{
-	    fprintf(stderr, "Unknown arguments for mdoc format: %s\n", args);
-	    fputs("Supported: os  [Override operating system with "
-		    "tool name and version]\n", stderr);
-	    return -1;
-	}
-    }
-    return write(out, root, F_MDOC, &opts);
-}
-
 static size_t parseOpt(char *buf, const char *argp, char **valp, char **nextp)
 {
     size_t n;
@@ -1398,6 +1379,91 @@ static size_t parseOpt(char *buf, const char *argp, char **valp, char **nextp)
     return n;
 }
 
+int writeMan(FILE *out, const CliDoc *root, const char *args)
+{
+    FmtOpts opts;
+    memset(&opts, 0, sizeof opts);
+    char *optstr = 0;
+    int rc = -1;
+    char *valp;
+    char *nextp;
+
+    if (args)
+    {
+	size_t arglen = strlen(args);
+	optstr = xmalloc(arglen + 1);
+	const char *argp = args;
+	char *buf = optstr;
+	size_t len;
+	while (buf && (len = parseOpt(buf, argp, &valp, &nextp)))
+	{
+	    if (!valp) goto error;
+	    if (!strcmp(buf, "sect")) opts.sect = valp;
+	    else goto error;
+	    buf = nextp;
+	    argp += len;
+	}
+    }
+
+    rc = write(out, root, F_MAN, &opts);
+    goto done;
+
+error:
+    fprintf(stderr, "Invalid arguments for man: %s\n", args);
+    fputs("Supported:  sect=mansection\n", stderr);
+
+done:
+    free(optstr);
+    return rc;
+}
+
+int writeMdoc(FILE *out, const CliDoc *root, const char *args)
+{
+    FmtOpts opts;
+    memset(&opts, 0, sizeof opts);
+    char *optstr = 0;
+    int rc = -1;
+    char *valp;
+    char *nextp;
+
+    if (args)
+    {
+	size_t arglen = strlen(args);
+	optstr = xmalloc(arglen + 1);
+	const char *argp = args;
+	char *buf = optstr;
+	size_t len;
+	while (buf && (len = parseOpt(buf, argp, &valp, &nextp)))
+	{
+	    if (!strcmp(buf, "os"))
+	    {
+		if (valp) goto error;
+		opts.os = 1;
+	    }
+	    else
+	    {
+		if (!valp) goto error;
+		if (!strcmp(buf, "sect")) opts.sect = valp;
+		else goto error;
+	    }
+	    buf = nextp;
+	    argp += len;
+	}
+    }
+
+    rc = write(out, root, F_MDOC, &opts);
+    goto done;
+
+error:
+    fprintf(stderr, "Invalid arguments for mdoc: %s\n", args);
+    fputs("Supported:  sect=mansection, os [Override operating system with "
+	    "tool name and version]\n", stderr);
+
+done:
+    free(optstr);
+    return rc;
+}
+
 int writeHtml(FILE *out, const CliDoc *root, const char *args)
 {
     FmtOpts opts;
@@ -1419,7 +1485,9 @@ int writeHtml(FILE *out, const CliDoc *root, const char *args)
 	while (buf && (len = parseOpt(buf, argp, &valp, &nextp)))
 	{
 	    if (!valp) goto error;
-	    if (!strcmp(buf, "style"))
+	    if (!strcmp(buf, "sect")) opts.sect = valp;
+	    else if (!strcmp(buf, "sectname")) opts.sectname = valp;
+	    else if (!strcmp(buf, "style"))
 	    {
 		css = fopen(valp, "r");
 		if (!css) goto styleerr;
@@ -1453,8 +1521,8 @@ styleerr:
 
 error:
     fprintf(stderr, "Invalid arguments for html: %s\n", args);
-    fputs("Supported:  style=file, styleuri=uri\n",
-	    stderr);
+    fputs("Supported:  sect=mansection, sectname=name, style=file, "
+	    "styleuri=uri\n", stderr);
 done:
     if (css) fclose(css);
     free(style);

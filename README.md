@@ -14,14 +14,18 @@ single-letter flags preceded by a dash (POSIX style).
   defaults to `man`.
   - `cpp`: A set of C preprocessor macros to print usage and help messages
   - `html`: A manpage in HTML format, using an embedded CSS style by default
+    * `html,sect=id`: Override the man section
+    * `html,sectname=name`: Override the string for the man section name
     * `html,style=file`: Embed the contents of `file` as the literal `<style>`
       in the output
     * `html,styleuri=uri`: Link to `uri` for CSS styling
   - `man`: A manpage in classic troff/man format
+    * `man,sect=id`: Override the man section
   - `mdoc`: A manpage in (BSD) mdoc format
+    * `mdoc,sect=id`: Override the man section
     * `mdoc,os`: Override the mdoc `.Os` value with the tool name and version
   - `sh`: A shell script snippet defining usage() and help() functions
-    * `mdoc,t=file[:sub]`: Use `file` as a template, replacing `sub` with the
+    * `sh,t=file[:sub]`: Use `file` as a template, replacing `sub` with the
       generated functions. `sub` defaults to `%%CLIDOC%%`
 * `-o outfile`: Optional output file, writes to `stdout` by default
 * `infile`: Optional input file, reads from `stdin` by default

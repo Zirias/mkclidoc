@@ -210,17 +210,17 @@
 "<html lang=\"en\">\n" \
 "<head>\n" \
 "%s%s%s" \
-"<title>%s(1)</title>\n" \
+"<title>%s(%s)</title>\n" \
 "<meta name=\"viewport\" content=\"width=device-width\">\n" \
 "</head>\n" \
 "<body>\n" \
-"<h1 data-man-title=\"%s\" data-man-section=\"1\" " \
-"data-man-sectionname=\"General Commands Manual\">%s(1)</h1>\n"
+"<h1 data-man-title=\"%s\" data-man-section=\"%s\" " \
+"data-man-sectionname=\"%s\">%s(%s)</h1>\n"
 
-#define HTML_HEADER_STYLE(style, title) \
+#define HTML_HEADER_STYLE(style, title, sect, sectname) \
     HTML_HEADER_FMT, HTML_STYLE_START, (style), HTML_STYLE_END, \
-    (title), (title), (title)
+    (title), (sect), (title), (sect), (sectname), (title), (sect)
 
-#define HTML_HEADER_STYLEURI(uri, title) \
+#define HTML_HEADER_STYLEURI(uri, title, sect, sectname) \
     HTML_HEADER_FMT, HTML_STYLEURI_START, (uri), HTML_STYLEURI_END, \
-    (title), (title), (title)
+    (title), (sect), (title), (sect), (sectname), (title), (sect)
