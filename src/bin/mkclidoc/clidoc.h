@@ -44,6 +44,8 @@ size_t CDRoot_nrefs(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_ref(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
 size_t CDRoot_nvars(const CliDoc *self) CMETHOD ATTR_PURE;
 const CliDoc *CDRoot_var(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
+size_t CDRoot_nsigs(const CliDoc *self) CMETHOD ATTR_PURE;
+const CliDoc *CDRoot_sig(const CliDoc *self, size_t i) CMETHOD ATTR_PURE;
 int CDRoot_defgroup(const CliDoc *self) CMETHOD ATTR_PURE;
 
 const CliDoc *CDArg_description(const CliDoc *self) CMETHOD ATTR_PURE;

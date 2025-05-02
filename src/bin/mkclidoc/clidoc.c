@@ -43,10 +43,12 @@ struct CDRoot
     CDArg **args;
     CDNamed **files;
     CDNamed **vars;
+    CDNamed **sigs;
     size_t nflags;
     size_t nargs;
     size_t nfiles;
     size_t nvars;
+    size_t nsigs;
     int defgroup;
 };
 
@@ -770,6 +772,34 @@ error:
     return -1;
 }
 
+static int parsesig(Parser *p, CDRoot *root)
+{
+    char *tmp = strchr(p->line, '\n');
+    if (!tmp) err("Expected end of line");
+    skipwsb(tmp);
+    --tmp;
+    if (tmp <= p->line) err("Unexpected end of line");
+    if (*tmp != ']') err("Tag not closed");
+    skipws(p->line);
+    if (p->line == tmp) err("Missing sig name");
+    CDNamed *sig = xmalloc(sizeof *sig);
+    memset(sig, 0, sizeof *sig);
+    sig->base.parent = (CliDoc *)root;
+    sig->base.type = CT_NAMED;
+    root->sigs = xrealloc(root->sigs,
+	    (root->nsigs+1) * sizeof *root->sigs);
+    root->sigs[root->nsigs++] = sig;
+    size_t siglen = tmp - p->line;
+    sig->name = xmalloc(siglen + 1);
+    strncpy(sig->name, p->line, siglen);
+    sig->name[siglen] = 0;
+    p->line = 0;
+    return parsenamedvals(p, sig);
+
+error:
+    return -1;
+}
+
 static int parse(CDRoot *root, FILE *doc)
 {
     Parser parser = { doc, 0, 0, {0} };
@@ -811,6 +841,11 @@ static int parse(CDRoot *root, FILE *doc)
 	    {
 		p->line += 5;
 		if (parsevar(p, root) < 0) goto error;
+	    }
+	    else if (!strncmp(p->line+1, "sig ", 4))
+	    {
+		p->line += 5;
+		if (parsesig(p, root) < 0) goto error;
 	    }
 	    else err("Unknown tag");
 	    continue;
@@ -976,8 +1011,20 @@ size_t CDRoot_nvars(const CliDoc *self)
 
 const CliDoc *CDRoot_var(const CliDoc *self, size_t i)
 {
-    assert(i < CDRoot_nfiles(self));
+    assert(i < CDRoot_nvars(self));
     return (const CliDoc *)((const CDRoot *)self)->vars[i];
+}
+
+size_t CDRoot_nsigs(const CliDoc *self)
+{
+    assert(self->type == CT_ROOT);
+    return ((const CDRoot *)self)->nsigs;
+}
+
+const CliDoc *CDRoot_sig(const CliDoc *self, size_t i)
+{
+    assert(i < CDRoot_nsigs(self));
+    return (const CliDoc *)((const CDRoot *)self)->sigs[i];
 }
 
 size_t CDRoot_nrefs(const CliDoc *self)
@@ -1238,6 +1285,14 @@ static void CDRoot_destroy(CliDoc *self)
 	    CliDoc_destroy((CliDoc *)root->vars[i]);
 	}
 	free(root->vars);
+    }
+    if (root->nvars)
+    {
+	for (size_t i = 0; i < root->nvars; ++i)
+	{
+	    CliDoc_destroy((CliDoc *)root->sigs[i]);
+	}
+	free(root->sigs);
     }
 }
 

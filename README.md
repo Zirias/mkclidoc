@@ -100,6 +100,9 @@ A description for `mkclidoc` is a simple text format like in this example:
     [var GREENOPTS]
     description: %%var%% is passed as extra arguments for `green` or `GREEN`.
 
+    [sig HUP]
+    description: Reload configuration while running.
+
 This example shows all currently supported fields and elements.
 
 A field starts with `<name>:`. Most fields just contain any text, except the

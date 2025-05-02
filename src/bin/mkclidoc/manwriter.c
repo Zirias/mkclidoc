@@ -1224,6 +1224,61 @@ static int write(FILE *out, const CliDoc *root, Fmt fmt, const FmtOpts *opts)
 	if (fmt == F_MDOC) fputs("\n.El", out);
     }
 
+    size_t nsigs = CDRoot_nsigs(root);
+    if (nsigs)
+    {
+	struct {
+	    const char *tag;
+	    size_t tagwidth;
+	} wspec = {0, 0};
+
+	if (fmt != F_HTML)
+	{
+	    for (size_t i = 0; i < nsigs; ++i)
+	    {
+		const CliDoc *sig = CDRoot_sig(root, i);
+		const char *vname = CDNamed_name(sig);
+		size_t namelen = strlen(vname) + 3;
+		if (namelen > wspec.tagwidth)
+		{
+		    wspec.tag = vname;
+		    wspec.tagwidth = namelen;
+		}
+	    }
+	    wspec.tagwidth += 2;
+	}
+
+	if (fmt == F_HTML)
+	{
+	    fputs("<h2>SIGNALS</h2>\n<dl class=\"environment\">\n", out);
+	}
+	else if (fmt == F_MDOC)
+	{
+	    fprintf(out, "\n.Sh SIGNALS\n.Bl -tag -width \"SIG%s\"",
+		    wspec.tag);
+	}
+	else fputs("\n.SH \"SIGNALS\"", out);
+	for (size_t i = 0; i < nsigs; ++i)
+	{
+	    if (fmt == F_MAN) fprintf(out, "\n.TP %un",
+		    (unsigned)wspec.tagwidth);
+	    const CliDoc *sig = CDRoot_sig(root, i);
+	    if (fmt == F_HTML)
+	    {
+		fprintf(out,
+			"<dt><span class=\"name\">SIG%s</span></dt>\n<dd>\n",
+			htmlescape(CDNamed_name(sig)));
+	    }
+	    else fprintf(out, fmt == F_MDOC ? "\n.It Ev SIG%s"
+		    : "\n\\fBSIG%s\\fR", CDNamed_name(sig));
+	    if (writeManDescription(out, &ctx,
+			CDNamed_description(sig), 0) < 0) goto error;
+	    if (fmt == F_HTML) fputs("</dd>\n", out);
+	}
+	if (fmt == F_HTML) fputs("</dl>\n", out);
+	if (fmt == F_MDOC) fputs("\n.El", out);
+    }
+
     size_t nfiles = CDRoot_nfiles(root);
     if (nfiles)
     {
